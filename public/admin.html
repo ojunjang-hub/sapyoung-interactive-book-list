@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관리자 — 사회평론 도서목록</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header admin-header">
+  <h1><a href="index.html">사회평론 도서목록</a> <span class="admin-badge">관리자</span></h1>
+  <button id="btn-logout" class="btn-logout" onclick="logout()">로그아웃</button>
+</header>
+
+<!-- 로그인 섹션 -->
+<div id="login-section" class="admin-login">
+  <div class="login-box">
+    <h2>관리자 로그인</h2>
+    <p class="muted">관리자 API 키를 입력하세요.</p>
+    <div class="login-row">
+      <input type="password" id="admin-key-input" placeholder="API 키"
+             autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') login()">
+      <button class="btn-primary" onclick="login()">로그인</button>
+    </div>
+    <p id="login-error" class="login-error" style="display:none">인증 실패. 키를 확인하세요.</p>
+  </div>
+</div>
+
+<!-- 관리 섹션 -->
+<div id="admin-section" style="display:none">
+
+  <!-- 신간 추가 바 -->
+  <div class="add-book-bar">
+    <span class="add-book-label">신간 추가</span>
+    <input type="text" id="add-isbn-input" placeholder="ISBN13 입력 (13자리)"
+           maxlength="17" onkeydown="if(event.key==='Enter') addBookByIsbn()">
+    <button class="btn-primary" onclick="addBookByIsbn()">추가</button>
+    <span id="add-book-result" class="add-book-result"></span>
+  </div>
+
+  <!-- 툴바 -->
+  <div class="toolbar">
+    <input type="search" id="q-input" placeholder="제목, 저자, ISBN 검색…"
+           onkeydown="if(event.key==='Enter') search()">
+    <select id="dept-filter"><option value="">전체 부서</option></select>
+    <select id="status-filter">
+      <option value="">전체 상태</option>
+      <option value="재고있음">재고있음</option>
+      <option value="품절">품절</option>
+      <option value="절판">절판</option>
+    </select>
+    <button onclick="search()">검색</button>
+    <button onclick="resetFilters()">초기화</button>
+  </div>
+
+  <div class="result-bar" id="result-bar">로딩 중…</div>
+
+  <!-- 도서 테이블 -->
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>표지</th>
+          <th>제목 / 저자 / ISBN</th>
+          <th>출간일</th>
+          <th>부서 / 분류</th>
+          <th>상태</th>
+          <th>편집</th>
+          <th>파일</th>
+        </tr>
+      </thead>
+      <tbody id="admin-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="admin-pagination" id="pagination"></div>
+</div>
+
+<!-- 편집 모달 -->
+<div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('edit-modal')">
+  <div class="modal-box">
+    <h3 id="edit-modal-title" class="modal-title"></h3>
+    <div class="modal-form">
+      <label>부서</label>
+      <input type="text" id="edit-dept" list="dept-datalist" placeholder="부서명">
+      <datalist id="dept-datalist"></datalist>
+      <label>분류</label>
+      <input type="text" id="edit-cat" placeholder="분류명">
+      <label>재고 상태</label>
+      <select id="edit-status">
+        <option value="">변경 없음</option>
+        <option value="재고있음">재고있음</option>
+        <option value="품절">품절</option>
+        <option value="절판">절판</option>
+      </select>
+      <label>표지 URL</label>
+      <input type="url" id="edit-cover" placeholder="https://image.aladin.co.kr/…">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="saveEdit()">저장</button>
+      <button onclick="closeModal('edit-modal')">취소</button>
+      <button class="btn-ghost btn-danger" onclick="resetOverride()">분류 초기화</button>
+    </div>
+    <p id="edit-msg" class="modal-msg"></p>
+  </div>
+</div>
+
+<!-- 파일 모달 -->
+<div id="files-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('files-modal')">
+  <div class="modal-box">
+    <h3 id="files-modal-title" class="modal-title"></h3>
+    <div id="files-list" class="files-list"></div>
+    <hr class="divider">
+    <h4 class="upload-heading">파일 업로드</h4>
+    <div class="modal-form">
+      <label>파일</label>
+      <input type="file" id="upload-file">
+      <label>유형 <span class="required">*</span></label>
+      <input type="text" id="upload-type" placeholder="강의계획서, 교수용교재 …">
+      <label>설명</label>
+      <input type="text" id="upload-desc" placeholder="">
+      <label>버전</label>
+      <input type="text" id="upload-ver" placeholder="1.0">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="uploadFile()">업로드</button>
+      <button onclick="closeModal('files-modal')">닫기</button>
+    </div>
+    <p id="files-msg" class="modal-msg"></p>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

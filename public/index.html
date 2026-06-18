@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>사회평론 도서목록</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1><a href="index.html">사회평론 도서목록</a></h1>
+      <nav class="header-nav">
+        <a href="#" id="btn-all-books" class="nav-link"><span id="total-count">전체 목록</span></a>
+        <a href="admin.html" class="nav-link">관리자</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ===== 랜딩 화면 ===== -->
+  <main id="landing">
+
+    <!-- 섹션 1: 가지치기 파인더 -->
+    <section class="finder-section">
+      <h2 class="section-title">어떤 책을 찾으세요?</h2>
+      <div id="finder-step1" class="finder-step">
+        <button class="finder-btn" data-dept="교양">나를 위한 책</button>
+        <button class="finder-btn" data-dept="어린이">아이와 함께</button>
+        <button class="finder-btn" data-dept="대학교재·학술">공부·연구용</button>
+      </div>
+      <div id="finder-step2" class="finder-step" style="display:none">
+        <button class="finder-back-btn" id="finder-back">← 다시 선택</button>
+        <p class="finder-hint" id="finder-hint"></p>
+        <div id="finder-categories" class="finder-cat-grid"></div>
+      </div>
+    </section>
+
+    <!-- 섹션 2: AI 직접 검색 -->
+    <section class="prompt-section">
+      <h2 class="section-title">직접 물어보세요</h2>
+      <div class="landing-ai-wrap">
+        <div class="ai-search-inner">
+          <span class="ai-label">AI</span>
+          <input type="text" id="ai-input"
+                 placeholder="어떤 책을 찾고 계세요? 예: 처음 읽는 철학, 아이 그림책 추천"
+                 onkeydown="if(event.key==='Enter') runAiSearch()">
+          <button class="ai-btn" onclick="runAiSearch()">검색</button>
+        </div>
+      </div>
+      <div class="ai-chips">
+        <button class="ai-chip" onclick="setAiQuery('국어 교육 기초서')">국어 교육 기초서</button>
+        <button class="ai-chip" onclick="setAiQuery('처음 읽는 철학')">처음 읽는 철학</button>
+        <button class="ai-chip" onclick="setAiQuery('아이 그림책 추천')">아이 그림책 추천</button>
+      </div>
+    </section>
+
+    <!-- 섹션 3: 신간 -->
+    <section class="newbooks-section">
+      <h2 class="section-title">새로 나온 책</h2>
+      <div class="newbooks-strip" id="newbooks-strip">
+        <div class="newbooks-loading">불러오는 중…</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== 그리드 뷰 (결과·전체보기) ===== -->
+  <div id="grid-view" style="display:none">
+    <div class="grid-view-bar">
+      <button class="back-to-landing" id="btn-back-landing">← 처음으로</button>
+      <span id="grid-view-title" class="grid-view-title"></span>
+    </div>
+
+    <div class="ai-status" id="ai-status" style="display:none">
+      <span class="ai-spinner"></span> AI가 도서를 분석 중입니다…
+    </div>
+
+    <!-- AI 결과 패널 -->
+    <div id="ai-result-panel" style="display:none">
+      <div class="ai-result-bar">
+        <p id="ai-summary" class="ai-summary"></p>
+        <button class="ai-back-btn" onclick="showNormalSearch()">필터 검색으로</button>
+      </div>
+      <div id="ai-grid" class="book-grid-wrap"></div>
+    </div>
+
+    <!-- 일반 검색 영역 -->
+    <div id="normal-search">
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="제목 · 저자 검색">
+        <select id="filter-department"><option value="">전체 부서</option></select>
+        <select id="filter-category"><option value="">전체 분야</option></select>
+        <select id="filter-series"><option value="">전체 시리즈</option></select>
+        <select id="filter-year"><option value="">전체 연도</option></select>
+        <select id="filter-stock"><option value="">전체 상태</option></select>
+        <span class="price-range">
+          <input type="number" id="price-min" placeholder="최소가" min="0" step="1000">
+          <span>~</span>
+          <input type="number" id="price-max" placeholder="최대가" min="0" step="1000">
+        </span>
+        <select id="sort">
+          <option value="pub_date_desc">최신순</option>
+          <option value="title_asc">제목순</option>
+          <option value="price_asc">가격 낮은순</option>
+          <option value="price_desc">가격 높은순</option>
+        </select>
+        <button id="reset-btn" type="button">초기화</button>
+      </div>
+      <div class="result-bar"><span id="result-count"></span></div>
+      <div id="book-grid"></div>
+    </div>
+  </div>
+
+  <script src="config.js?v=3"></script>
+  <script src="main.js?v=3"></script>
+</body>
+</html>

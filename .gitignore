@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# 환경 설정 (API 키 포함)
+.env
+
+# DB (로컬 전용 — 서버 이식 시 별도 마이그레이션)
+books.db
+*.db-shm
+*.db-wal
+
+# 스토리지 (업로드 파일)
+backend/storage/
+
+# 작업 디렉토리 (스크립트 중간 산출물)
+_workspace/
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 임시/로그
+uvicorn.log
+*.log
+*.tmp.*
+
+# InDesign 원본 (대용량 바이너리)
+*.idml
+
+# Claude Code 로컬 설정
+.claude/
