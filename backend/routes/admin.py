@@ -1,15 +1,32 @@
 import json
+import logging
+import sqlite3
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from auth import verify_admin
+from config import settings
 from database import get_conn
+from publish import rebuild_public_json
+from routes.search import load_index
 
 router = APIRouter()
 
-_ALADIN_KEY = "ttbojunjang2101001"
+
+def _refresh_derived() -> None:
+    """관리자 변경을 파생 산출물에 반영: AI 검색 인덱스 + 공개 정적 JSON.
+    하나가 실패해도 다른 하나는 시도하며, 관리자 동작 자체는 막지 않는다."""
+    try:
+        load_index()
+    except Exception:
+        logging.exception("AI 검색 인덱스 재빌드 실패")
+    try:
+        rebuild_public_json()
+    except Exception:
+        logging.exception("공개 JSON 재생성 실패")
+
 _ALADIN_URL = "http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx"
 _ALADIN_OPT = "Toc,Story,fulldescription,fulldescription2,phraseList,authors,ratingInfo,bestSellerRank"
 
@@ -35,8 +52,10 @@ _VALID_STATUSES = {"재고있음", "품절", "절판", ""}
 
 
 async def _fetch_aladin(isbn13: str) -> dict:
+    if not settings.aladin_ttb_key:
+        raise HTTPException(503, "ALADIN_TTB_KEY가 설정되지 않았습니다.")
     params = {
-        "ttbkey": _ALADIN_KEY,
+        "ttbkey": settings.aladin_ttb_key,
         "itemIdType": "ISBN13",
         "ItemId": isbn13,
         "output": "js",
@@ -65,11 +84,26 @@ def _map_aladin_item(item: dict) -> dict:
     link = item.get("link", "")
     if link:
         store_links["aladin"] = link
+
+    # 알라딘 분류: categoryName(예: "국내도서>인문학>...") 경로를 파이프라인과 동일한
+    # [{categoryId, categoryName}] 형태로 저장(프런트 상세의 '알라딘 분류'가 이 형태를 사용).
+    cat_name = (item.get("categoryName") or "").strip()
+    aladin_category = (
+        [{"categoryId": item.get("categoryId"), "categoryName": cat_name}]
+        if cat_name else []
+    )
+    # 분야 초기값: 부서는 '미분류'(관리자 보정 필요), 분야는 알라딘 최심 카테고리명.
+    # department_src를 채워야 books_effective.department_effective가 NULL이 아니어서
+    # 목록 필터·파인더에 노출된다.
+    category_src = cat_name.split(">")[-1].strip() if cat_name else None
+
     return {
         "title": item.get("title"),
         "author": item.get("author"),
         "publisher": item.get("publisher"),
         "pub_date": item.get("pubDate"),
+        "department_src": "미분류",
+        "category_src": category_src,
         "price_standard": item.get("priceStandard"),
         "price_sales": item.get("priceSales"),
         "cover_url": item.get("cover"),
@@ -79,7 +113,7 @@ def _map_aladin_item(item: dict) -> dict:
         "toc": sub.get("toc"),
         "full_description": sub.get("fulldescription"),
         "publisher_description": sub.get("fulldescription2"),
-        "aladin_category": json.dumps(item.get("categoryIdList", []), ensure_ascii=False),
+        "aladin_category": json.dumps(aladin_category, ensure_ascii=False),
         "store_links": json.dumps(store_links, ensure_ascii=False),
         "aladin_enriched": 1,
     }
@@ -109,12 +143,17 @@ async def add_book_by_isbn(body: AddBookRequest, _: str = Depends(verify_admin))
     col_sql = ", ".join(cols)
 
     with get_conn() as conn:
-        conn.execute(
-            f"INSERT INTO books ({col_sql}) VALUES ({placeholders})",
-            vals,
-        )
-        conn.commit()
+        try:
+            conn.execute(
+                f"INSERT INTO books ({col_sql}) VALUES ({placeholders})",
+                vals,
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            # 사전 확인과 INSERT 사이의 경쟁 조건(중복 추가) 방어
+            raise HTTPException(409, "이미 목록에 있는 도서입니다")
 
+    _refresh_derived()  # 신간을 AI 검색 인덱스 + 공개 JSON에 반영
     return {"ok": True, "isbn13": isbn, "title": fields.get("title"), "cover_url": fields.get("cover_url")}
 
 
@@ -200,6 +239,7 @@ async def update_classification(
             (isbn13, body.department, body.category),
         )
         conn.commit()
+    _refresh_derived()  # 분류 변경을 인덱스 + 공개 JSON에 반영
     return {"ok": True}
 
 
@@ -219,6 +259,7 @@ async def update_status(
         if result.rowcount == 0:
             raise HTTPException(404, "도서를 찾을 수 없습니다")
         conn.commit()
+    _refresh_derived()  # 재고 상태(절판 등) 변경을 인덱스 + 공개 JSON에 반영
     return {"ok": True}
 
 
@@ -236,6 +277,7 @@ async def update_cover(
         if result.rowcount == 0:
             raise HTTPException(404, "도서를 찾을 수 없습니다")
         conn.commit()
+    _refresh_derived()  # 표지 URL은 공개 JSON에 포함 → 재발행
     return {"ok": True}
 
 
@@ -244,4 +286,5 @@ async def delete_override(isbn13: str, _: str = Depends(verify_admin)):
     with get_conn() as conn:
         conn.execute("DELETE FROM admin_overrides WHERE isbn13 = ?", (isbn13,))
         conn.commit()
+    _refresh_derived()  # 오버라이드 해제(분류 원복)를 인덱스 + 공개 JSON에 반영
     return {"ok": True}

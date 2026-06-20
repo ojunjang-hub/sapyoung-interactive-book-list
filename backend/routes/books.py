@@ -26,7 +26,17 @@ JSON_FIELDS = (
     "aladin_category",
     "store_links",
     "quotable_phrases",
-    "best_rank",
+)
+
+# 상세 페이지에 노출할 공개 컬럼만 선별 (내부 컬럼·미사용 AI 필드 제외)
+DETAIL_COLUMNS = (
+    "isbn13, title, author, publisher, pub_date, "
+    "department_effective AS department, "
+    "category_effective   AS category, "
+    "series, pages, price_standard, price_sales, cover_url, "
+    "description, full_description, publisher_description, author_intro, "
+    "endorsements, toc, quotable_phrases, aladin_category, "
+    "sales_point, stock_status, store_links"
 )
 
 
@@ -145,15 +155,13 @@ async def get_filters():
 async def get_book(isbn13: str):
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM books_effective WHERE isbn13 = ?", (isbn13,)
+            f"SELECT {DETAIL_COLUMNS} FROM books_effective WHERE isbn13 = ?",
+            (isbn13,),
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="도서를 찾을 수 없습니다")
 
         book = dict(row)
-        book.pop("embedding", None)
-        book["department"] = book.get("department_effective")
-        book["category"] = book.get("category_effective")
 
         for field in JSON_FIELDS:
             raw = book.get(field)

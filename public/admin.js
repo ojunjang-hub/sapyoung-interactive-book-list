@@ -10,11 +10,7 @@ let filesIsbn = null;
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
-function esc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+// esc()는 util.js에서 전역 제공
 
 function adminHeaders(extra) {
   return { 'X-Admin-Key': adminKey, ...extra };

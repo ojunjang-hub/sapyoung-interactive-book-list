@@ -14,11 +14,19 @@ books.db
 *.db-shm
 *.db-wal
 
-# 스토리지 (업로드 파일)
-backend/storage/
+# 스토리지 (업로드 파일) — config FILE_STORAGE_PATH=./storage 기준 루트 경로
+storage/
 
 # 작업 디렉토리 (스크립트 중간 산출물)
 _workspace/
+
+# QA 세션 작업물 (대용량 DB 백업·검토 CSV)
+QA_세션_작업물/
+
+# 루트 일회성 보강 스크립트 (API 키 포함 가능 — 커밋 금지)
+/aladin_enrich.py
+/kobic_enrich.py
+/수정 작업 6건.txt
 
 # 에디터
 .vscode/

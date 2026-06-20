@@ -4,7 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>사회평론 도서목록</title>
-  <link rel="stylesheet" href="style.css">
+  <!-- 뷰 모드 클래스를 렌더 전에 적용해 내부 요소 깜빡임(FOUC) 방지 -->
+  <script>
+    (function () {
+      try {
+        var m = new URLSearchParams(location.search).get('mode');
+        if (m === 'internal' || m === 'public') localStorage.setItem('view_mode', m);
+        var mode = localStorage.getItem('view_mode') === 'internal' ? 'mode-internal' : 'mode-public';
+        document.documentElement.classList.add(mode);
+      } catch (e) { document.documentElement.classList.add('mode-public'); }
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <header class="site-header">
@@ -12,7 +23,7 @@
       <h1><a href="index.html">사회평론 도서목록</a></h1>
       <nav class="header-nav">
         <a href="#" id="btn-all-books" class="nav-link"><span id="total-count">전체 목록</span></a>
-        <a href="admin.html" class="nav-link">관리자</a>
+        <a href="admin.html" class="nav-link internal-only">관리자</a>
       </nav>
     </div>
   </header>
@@ -35,19 +46,25 @@
       </div>
     </section>
 
-    <!-- 섹션 2: AI 직접 검색 -->
+    <!-- 섹션 2: 검색 (일반 / AI 토글) -->
     <section class="prompt-section">
-      <h2 class="section-title">직접 물어보세요</h2>
+      <h2 class="section-title">책 찾기</h2>
+      <div class="search-mode-toggle" role="tablist">
+        <button type="button" id="mode-normal" class="search-mode-btn"
+                onclick="setSearchMode('normal')">일반 검색</button>
+        <button type="button" id="mode-ai" class="search-mode-btn"
+                onclick="setSearchMode('ai')">AI 검색</button>
+      </div>
       <div class="landing-ai-wrap">
         <div class="ai-search-inner">
-          <span class="ai-label">AI</span>
+          <span class="ai-label" id="ai-label">AI</span>
           <input type="text" id="ai-input"
-                 placeholder="어떤 책을 찾고 계세요? 예: 처음 읽는 철학, 아이 그림책 추천"
-                 onkeydown="if(event.key==='Enter') runAiSearch()">
-          <button class="ai-btn" onclick="runAiSearch()">검색</button>
+                 placeholder="제목 · 저자로 검색"
+                 onkeydown="if(event.key==='Enter') submitLandingSearch()">
+          <button class="ai-btn" onclick="submitLandingSearch()">검색</button>
         </div>
       </div>
-      <div class="ai-chips">
+      <div class="ai-chips" id="ai-chips">
         <button class="ai-chip" onclick="setAiQuery('국어 교육 기초서')">국어 교육 기초서</button>
         <button class="ai-chip" onclick="setAiQuery('처음 읽는 철학')">처음 읽는 철학</button>
         <button class="ai-chip" onclick="setAiQuery('아이 그림책 추천')">아이 그림책 추천</button>
@@ -88,7 +105,7 @@
     <div id="normal-search">
       <div class="toolbar">
         <input type="search" id="search" placeholder="제목 · 저자 검색">
-        <select id="filter-department"><option value="">전체 부서</option></select>
+        <select id="filter-department" class="internal-only"><option value="">전체 부서</option></select>
         <select id="filter-category"><option value="">전체 분야</option></select>
         <select id="filter-series"><option value="">전체 시리즈</option></select>
         <select id="filter-year"><option value="">전체 연도</option></select>
@@ -112,6 +129,7 @@
   </div>
 
   <script src="config.js?v=3"></script>
-  <script src="main.js?v=3"></script>
+  <script src="util.js?v=2"></script>
+  <script src="main.js?v=6"></script>
 </body>
 </html>

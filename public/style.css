@@ -121,6 +121,34 @@ a { color: inherit; }
   padding: 32px 20px 24px;
   border-bottom: 1px solid var(--line);
 }
+/* 공개(public) 뷰에서는 내부 전용 요소를 숨긴다. internal 뷰에서는 그대로 노출 */
+.mode-public .internal-only { display: none !important; }
+
+/* 검색 모드 토글 (일반 / AI) */
+.search-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  background: #f0f0f0;
+  border-radius: 10px;
+}
+.search-mode-btn {
+  padding: 7px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.search-mode-btn.active {
+  background: #fff;
+  color: var(--fg);
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
 .landing-ai-wrap {
   background: linear-gradient(135deg, #1a2a3a 0%, #2c3e50 100%);
   border-radius: 12px;
@@ -430,6 +458,18 @@ a { color: inherit; }
 }
 .detail .description p { margin: 0 0 12px; }
 .detail .description p:last-child { margin-bottom: 0; }
+
+/* 인상적인 구절 */
+.detail .quote-list { display: flex; flex-direction: column; gap: 12px; }
+.detail .quote {
+  margin: 0;
+  padding: 10px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-soft, #f7f7f7);
+  color: var(--fg);
+  font-style: italic;
+  border-radius: 0 4px 4px 0;
+}
 
 /* 자료 다운로드 */
 .back-link { display: inline-block; padding: 16px; font-size: 14px; }

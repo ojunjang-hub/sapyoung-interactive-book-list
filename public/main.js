@@ -9,15 +9,13 @@ const PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
 
 let allBooks = [];
 
-function esc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+// esc()는 util.js에서 전역 제공
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
+  applyViewModeClass();  // 공개/내부 뷰 모드 (기본 public)
+
   // 데이터 로드 — 실패해도 UI는 계속 동작
   try {
     const resp = await fetch(`${CONFIG.API_BASE}/api/books?size=2000`);
@@ -44,8 +42,96 @@ async function init() {
 
   buildFilters();
   bindEvents();
+  setSearchMode('normal');  // 기본 검색 모드 = 일반 (배지·예시칩 숨김)
   loadNewBooks();
+
+  // 뒤로가기 라우팅: 현재 URL/history.state로 화면 복원
+  history.scrollRestoration = 'manual';
+  applyState(history.state || null);
+  replaceNav();  // 초기 항목에 state 기록
 }
+
+// ─── 라우팅 / 히스토리 (뒤로가기 지원) ─────────────────────────────────────────
+
+let restoring = false;  // 복원 중에는 pushState를 막아 루프 방지
+
+const FILTER_IDS = {
+  q: 'search', department: 'filter-department', category: 'filter-category',
+  series: 'filter-series', year: 'filter-year', stock: 'filter-stock',
+  priceMin: 'price-min', priceMax: 'price-max', sort: 'sort',
+};
+
+function currentView() {
+  const grid = document.getElementById('grid-view');
+  return grid && grid.style.display !== 'none' ? 'grid' : 'landing';
+}
+
+function collectState(view) {
+  const s = { view: view || currentView(), scrollY: window.scrollY };
+  for (const [k, id] of Object.entries(FILTER_IDS)) {
+    const el = document.getElementById(id);
+    if (el && el.value) s[k] = el.value;
+  }
+  return s;
+}
+
+function stateToUrl(s) {
+  const p = new URLSearchParams();
+  if (s.view === 'grid') p.set('view', 'grid');
+  for (const k of Object.keys(FILTER_IDS)) if (s[k]) p.set(k, s[k]);
+  // 내부 모드 플래그는 URL에 유지(공유/새로고침 시)
+  if (isInternal()) p.set('mode', 'internal');
+  const qs = p.toString();
+  return location.pathname + (qs ? '?' + qs : '');
+}
+
+function pushNav(view) {
+  if (restoring) return;
+  const s = collectState(view);
+  history.pushState(s, '', stateToUrl(s));
+}
+
+function replaceNav(view) {
+  const s = collectState(view);
+  history.replaceState(s, '', stateToUrl(s));
+}
+
+function applyState(s) {
+  if (!s || !s.view) {
+    const p = new URLSearchParams(location.search);
+    s = Object.assign({}, s, { view: p.get('view') === 'grid' ? 'grid' : 'landing' });
+    for (const k of Object.keys(FILTER_IDS)) { const v = p.get(k); if (v) s[k] = v; }
+  }
+  restoring = true;
+  try {
+    const setVal = (k, v) => { const el = document.getElementById(FILTER_IDS[k]); if (el) el.value = v || ''; };
+    setVal('department', s.department);
+    updateCategoryOptions(s.department || '');
+    ['q', 'category', 'series', 'year', 'stock', 'priceMin', 'priceMax', 'sort']
+      .forEach(k => setVal(k, s[k]));
+
+    if (s.view === 'grid') {
+      document.getElementById('landing').style.display = 'none';
+      document.getElementById('grid-view').style.display = '';
+      document.getElementById('ai-result-panel').style.display = 'none';
+      document.getElementById('ai-status').style.display = 'none';
+      document.getElementById('normal-search').style.display = '';
+      const dept = s.department || '', cat = s.category || '';
+      document.getElementById('grid-view-title').textContent =
+        [dept, cat].filter(Boolean).join(' · ') || '전체 목록';
+      render();
+    } else {
+      document.getElementById('grid-view').style.display = 'none';
+      document.getElementById('landing').style.display = '';
+    }
+  } finally {
+    restoring = false;
+  }
+  const y = (s && typeof s.scrollY === 'number') ? s.scrollY : 0;
+  requestAnimationFrame(() => window.scrollTo(0, y));
+}
+
+window.addEventListener('popstate', e => applyState(e.state || null));
 
 // ─── View switching ───────────────────────────────────────────────────────────
 
@@ -71,6 +157,7 @@ function showGrid(preFilters) {
   titleEl.textContent = [dept, cat].filter(Boolean).join(' · ') || '전체 목록';
 
   render();
+  pushNav('grid');  // 히스토리 항목 추가 (뒤로가기 대상)
 }
 
 function showLanding() {
@@ -87,6 +174,7 @@ function showLanding() {
 
   // Clear AI input
   document.getElementById('ai-input').value = '';
+  pushNav('landing');  // 히스토리 항목 추가
 }
 
 function showNormalSearch() {
@@ -108,6 +196,15 @@ function initFinder() {
     });
   });
   document.getElementById('finder-back').addEventListener('click', resetFinder);
+
+  // 분야 버튼은 동적으로 생성되므로 컨테이너에 이벤트 위임
+  document.getElementById('finder-categories').addEventListener('click', e => {
+    const btn = e.target.closest('.finder-cat-btn');
+    if (!btn) return;
+    const dept = btn.dataset.dept;
+    const cat = btn.dataset.cat;
+    showGrid(cat ? { department: dept, category: cat } : { department: dept });
+  });
 }
 
 function showFinderStep2(dept) {
@@ -128,9 +225,10 @@ function showFinderStep2(dept) {
     return;
   }
 
-  const allBtn = `<button class="finder-cat-btn finder-cat-all" onclick="showGrid({department:'${dept}'})">전체 보기</button>`;
+  const allBtn =
+    `<button class="finder-cat-btn finder-cat-all" data-dept="${esc(dept)}">전체 보기</button>`;
   container.innerHTML = allBtn + cats.map(cat =>
-    `<button class="finder-cat-btn" onclick="showGrid({department:${JSON.stringify(dept)},category:${JSON.stringify(cat)}})">${esc(cat)}</button>`
+    `<button class="finder-cat-btn" data-dept="${esc(dept)}" data-cat="${esc(cat)}">${esc(cat)}</button>`
   ).join('');
 }
 
@@ -146,9 +244,14 @@ function loadNewBooks() {
   const strip = document.getElementById('newbooks-strip');
   if (!strip) return;
 
+  // 표지 있는 신간을 우선 채우고(표지 없음은 후순위), 같은 그룹 안에서 최신순
   const newBooks = [...allBooks]
     .filter(b => b.pub_date && b.stock_status !== '절판')
-    .sort((a, b) => (b.pub_date || '').localeCompare(a.pub_date || ''))
+    .sort((a, b) => {
+      const ca = hasCover(a), cb = hasCover(b);
+      if (ca !== cb) return ca ? -1 : 1;
+      return (b.pub_date || '').localeCompare(a.pub_date || '');
+    })
     .slice(0, 12);
 
   if (!newBooks.length) {
@@ -266,8 +369,15 @@ function applyFilters(books, f) {
   });
 }
 
+function hasCover(b) {
+  return !!(b.cover_url && String(b.cover_url).trim());
+}
+
 function sortBooks(books, key) {
   return [...books].sort((a, b) => {
+    // 같은 정렬 기준 안에서 '표지 있음'을 '표지 없음'보다 앞에 둔다
+    const ca = hasCover(a), cb = hasCover(b);
+    if (ca !== cb) return ca ? -1 : 1;
     switch (key) {
       case 'title_asc':   return (a.title || '').localeCompare(b.title || '', 'ko');
       case 'price_asc':   return (a.price_sales || 0) - (b.price_sales || 0);
@@ -313,9 +423,42 @@ function renderGrid(books) {
   }).join('');
 }
 
+// ─── 검색 모드 (일반 / AI) ────────────────────────────────────────────────────
+
+let searchMode = 'normal';  // 기본: 일반 검색
+
+function setSearchMode(mode) {
+  searchMode = (mode === 'ai') ? 'ai' : 'normal';
+  const isAi = searchMode === 'ai';
+  document.getElementById('mode-normal').classList.toggle('active', !isAi);
+  document.getElementById('mode-ai').classList.toggle('active', isAi);
+  const label = document.getElementById('ai-label');
+  const chips = document.getElementById('ai-chips');
+  if (label) label.style.display = isAi ? '' : 'none';
+  if (chips) chips.style.display = isAi ? '' : 'none';
+  const input = document.getElementById('ai-input');
+  if (input) {
+    input.placeholder = isAi
+      ? '어떤 책을 찾고 계세요? 예: 처음 읽는 철학, 아이 그림책 추천'
+      : '제목 · 저자로 검색';
+  }
+}
+
+function submitLandingSearch() {
+  if (searchMode === 'ai') {
+    runAiSearch();
+    return;
+  }
+  // 일반 검색: 기존 목록 필터의 검색 로직(applyFilters의 q) 재사용
+  const text = document.getElementById('ai-input').value.trim();
+  showGrid({ q: text });
+}
+
 // ─── AI 자연어 검색 ──────────────────────────────────────────────────────────
 
 function setAiQuery(text) {
+  // 예시 칩 클릭 시 AI 모드로 전환 후 검색
+  setSearchMode('ai');
   document.getElementById('ai-input').value = text;
   runAiSearch();
 }
@@ -394,6 +537,12 @@ async function runAiSearch() {
 
 // ─── Event binding ────────────────────────────────────────────────────────────
 
+// 필터 변경 시: 렌더 후 히스토리 항목 추가(뒤로가기로 직전 필터 상태 복원)
+function renderAndPush() {
+  render();
+  pushNav('grid');
+}
+
 function bindEvents() {
   document.getElementById('btn-all-books').addEventListener('click', e => {
     e.preventDefault();
@@ -406,23 +555,23 @@ function bindEvents() {
   let t;
   document.getElementById('search').addEventListener('input', () => {
     clearTimeout(t);
-    t = setTimeout(render, 200);
+    t = setTimeout(renderAndPush, 250);
   });
 
   document.getElementById('filter-department').addEventListener('change', () => {
     const dept = document.getElementById('filter-department').value;
     document.getElementById('filter-category').selectedIndex = 0;
     updateCategoryOptions(dept);
-    render();
+    renderAndPush();
   });
 
   ['filter-category', 'filter-series', 'filter-year', 'filter-stock', 'sort']
-    .forEach(id => document.getElementById(id).addEventListener('change', render));
+    .forEach(id => document.getElementById(id).addEventListener('change', renderAndPush));
 
   ['price-min', 'price-max'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
       clearTimeout(t);
-      t = setTimeout(render, 300);
+      t = setTimeout(renderAndPush, 350);
     });
   });
 
@@ -430,8 +579,15 @@ function bindEvents() {
     document.querySelectorAll('.toolbar input').forEach(el => (el.value = ''));
     document.querySelectorAll('.toolbar select').forEach(el => (el.selectedIndex = 0));
     buildFilters();
-    render();
+    renderAndPush();
   });
+
+  // 상세(book.html)로 이동하기 직전, 현재 스크롤 위치를 history.state에 저장
+  // → 뒤로가기로 돌아왔을 때 목록 스크롤 위치 복원
+  document.addEventListener('click', e => {
+    const card = e.target.closest('a.book-card, a.newbook-card');
+    if (card) replaceNav();
+  }, true);
 }
 
 window.PLACEHOLDER = PLACEHOLDER;

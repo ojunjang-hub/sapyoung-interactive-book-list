@@ -7,11 +7,7 @@ const PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
   '</svg>'
 );
 
-function esc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+// esc()는 util.js에서 전역 제공
 
 async function loadBook() {
   const isbn = new URLSearchParams(location.search).get('isbn');
@@ -46,36 +42,65 @@ async function loadBook() {
   render(book);
 }
 
+// 값이 비어 있으면(null/빈문자열/빈배열) 해당 항목 자체를 표시하지 않는다.
+function hasValue(v) {
+  if (v == null) return false;
+  if (typeof v === 'string') return v.trim() !== '';
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
+}
+
 function render(book) {
   const oop = book.stock_status === '절판';
   const sold = book.stock_status === '품절';
   const statusBadge = oop ? '<span class="status-badge oop">절판</span>'
     : sold ? '<span class="status-badge sold-out">품절</span>' : '';
 
-  const links = normalizeLinks(book.store_links);
-  const storeHtml = [
-    links.kyobo && `<a href="${esc(links.kyobo)}" target="_blank" rel="noopener" class="btn-store">교보문고</a>`,
-    links.yes24 && `<a href="${esc(links.yes24)}" target="_blank" rel="noopener" class="btn-store">YES24</a>`,
-    links.aladin && `<a href="${esc(links.aladin)}" target="_blank" rel="noopener" class="btn-store">알라딘</a>`,
-  ].filter(Boolean).join('');
+  // 서점 링크는 ISBN 기반 정상 URL로 직접 생성(교보/예스24의 기존 저장값이 오작동).
+  // 알라딘은 보강 시 받은 실제 상품 링크가 있으면 우선 사용.
+  const isbn = book.isbn13;
+  const stored = normalizeLinks(book.store_links);
+  const storeUrls = [
+    ['교보문고', `https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(isbn)}`],
+    ['YES24',   `https://www.yes24.com/product/search?query=${encodeURIComponent(isbn)}`],
+    ['알라딘',  stored.aladin || `https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=${encodeURIComponent(isbn)}`],
+  ];
+  const storeHtml = isbn ? storeUrls
+    .map(([label, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener" class="btn-store">${esc(label)}</a>`)
+    .join('') : '';
 
+  const won = n => '₩' + Number(n).toLocaleString();
+
+  // ── 서지/스펙 행 (값 없으면 라벨까지 함께 제외) ──
+  // 판매지수는 내부(internal) 뷰에서만 노출
   const rows = [
     ['출판사', book.publisher],
     ['출간일', book.pub_date],
     ['분야', [book.department, book.category].filter(Boolean).join(' › ')],
     ['시리즈', book.series],
+    ['쪽수', hasValue(book.pages) ? `${book.pages}쪽` : null],
     ['ISBN', book.isbn13],
-    ['정가', book.price_standard != null ? '₩' + book.price_standard.toLocaleString() : null],
-    ['판매가', book.price_sales != null ? '₩' + book.price_sales.toLocaleString() : null],
-  ].filter(([, v]) => v != null && v !== '')
+    ['정가', book.price_standard != null ? won(book.price_standard) : null],
+    ['재고 상태', book.stock_status],
+    (isInternal() && book.sales_point != null)
+      ? ['알라딘 판매지수', Number(book.sales_point).toLocaleString()] : null,
+  ].filter(Boolean)
+    .filter(([, v]) => hasValue(v))
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
 
-  // 소개: 출판사 소개 → aladin 전체 소개 → 짧은 소개 순으로 우선
-  const pubDesc  = book.publisher_description || '';
-  const fullDesc = book.full_description || book.description || '';
-  const toc = formatToc(book.toc || '');
+  // ── 긴 내용 블록 (값 없으면 제목까지 함께 제외) ──
+  const sections = [
+    ['책 소개', formatDesc(book.full_description || book.description || '')],
+    ['저자 소개', formatDesc(book.author_intro || '')],
+    ['출판사 서평', formatDesc(book.publisher_description || '')],
+    ['추천사', formatDesc(book.endorsements || '')],
+    ['인상적인 구절', formatQuotes(book.quotable_phrases)],
+    ['목차', formatToc(book.toc || '')],
+  ].filter(([, html]) => hasValue(html))
+    .map(([title, html]) => `<div class="description"><h3>${esc(title)}</h3>${html}</div>`)
+    .join('');
+
   const attachments = Array.isArray(book.attachments) ? book.attachments : [];
-  const isbn = book.isbn13;
 
   const attachHtml = attachments.length ? `
     <div class="attachments">
@@ -99,20 +124,34 @@ function render(book) {
         <h2>${esc(book.title)}${statusBadge}</h2>
         <p class="author">${esc(book.author || '')}</p>
         ${storeHtml ? `<div class="store-links">${storeHtml}</div>` : ''}
-        <dl>${rows}</dl>
-        ${pubDesc  ? `<div class="description"><h3>출판사 서평</h3>${formatDesc(pubDesc)}</div>`  : ''}
-        ${fullDesc ? `<div class="description"><h3>책 소개</h3>${formatDesc(fullDesc)}</div>` : ''}
-        ${toc      ? `<div class="description"><h3>목차</h3>${toc}</div>` : ''}
+        ${rows ? `<dl>${rows}</dl>` : ''}
+        ${sections}
         ${attachHtml}
       </div>
     </article>`;
 }
 
+// 본문 텍스트용: 빈 줄(\n\n+)로 문단 분리, 문단 내 단일 줄바꿈(\n)은 한 줄 더 띄워(<br><br>) 표시.
+// DB 설명/저자소개/서평은 단일 \n으로 줄을 구분하므로 반드시 보존해야 한다.
 function formatDesc(text) {
   if (!text) return '';
-  return text.split(/\n\n+/)
-    .map(p => `<p>${esc(p.replace(/\n/g, ' ').trim())}</p>`)
+  return text.replace(/\r\n/g, '\n').split(/\n\n+/)
+    .map(p => p.replace(/\n+$/g, '').replace(/^\n+/g, ''))
+    .filter(p => p.trim())
+    .map(p => `<p>${esc(p).replace(/\n/g, '<br><br>')}</p>`)
     .join('');
+}
+
+// 인상적인 구절: 백엔드가 JSON 배열로 주면 배열, 파싱 실패 시 문자열로 들어온다
+function formatQuotes(raw) {
+  let items = [];
+  if (Array.isArray(raw)) items = raw;
+  else if (typeof raw === 'string') items = raw.split(/\n\n+/);
+  items = items.map(q => String(q == null ? '' : q).trim()).filter(Boolean);
+  if (!items.length) return '';
+  return '<div class="quote-list">' +
+    items.map(q => `<blockquote class="quote">${esc(q)}</blockquote>`).join('') +
+    '</div>';
 }
 
 function formatToc(text) {
@@ -147,4 +186,5 @@ function normalizeLinks(raw) {
 }
 
 window.PLACEHOLDER = PLACEHOLDER;
+applyViewModeClass();
 loadBook();
