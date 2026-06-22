@@ -48,6 +48,38 @@ class AddBookRequest(BaseModel):
     isbn13: str
 
 
+class BookUpdate(BaseModel):
+    """도서 종합 편집. 보낸(set) 필드만 갱신한다(model_dump(exclude_unset=True))."""
+    title: str | None = None
+    author: str | None = None
+    publisher: str | None = None
+    pub_date: str | None = None
+    series: str | None = None
+    pages: int | None = None
+    price_standard: int | None = None
+    price_sales: int | None = None
+    cover_url: str | None = None
+    stock_status: str | None = None
+    description: str | None = None
+    full_description: str | None = None
+    publisher_description: str | None = None
+    author_intro: str | None = None
+    endorsements: str | None = None
+    quotable_phrases: str | None = None
+    toc: str | None = None
+    department: str | None = None  # → admin_overrides
+    category: str | None = None    # → admin_overrides
+
+
+# books 테이블에서 직접 편집 가능한 컬럼 (department/category는 overrides로 분리)
+_EDITABLE_COLS = {
+    "title", "author", "publisher", "pub_date", "series", "pages",
+    "price_standard", "price_sales", "cover_url", "stock_status",
+    "description", "full_description", "publisher_description",
+    "author_intro", "endorsements", "quotable_phrases", "toc",
+}
+
+
 _VALID_STATUSES = {"재고있음", "품절", "절판", ""}
 
 
@@ -278,6 +310,59 @@ async def update_cover(
             raise HTTPException(404, "도서를 찾을 수 없습니다")
         conn.commit()
     _refresh_derived()  # 표지 URL은 공개 JSON에 포함 → 재발행
+    return {"ok": True}
+
+
+@router.patch("/books/{isbn13}")
+async def update_book(
+    isbn13: str,
+    body: BookUpdate,
+    _: str = Depends(verify_admin),
+):
+    """도서 종합 편집: books 테이블 컬럼 + 분류(overrides)를 한 번에 갱신."""
+    data = body.model_dump(exclude_unset=True)
+    data.pop("department", None)
+    data.pop("category", None)
+    # 분류는 값이 실제로 있을 때만 변경(빈값/미전송은 무시 — 초기화는 리셋 버튼)
+    dept_val = (body.department or None) if body.department else None
+    cat_val = (body.category or None) if body.category else None
+
+    cols = {k: v for k, v in data.items() if k in _EDITABLE_COLS}
+    if "stock_status" in cols and cols["stock_status"] not in _VALID_STATUSES:
+        raise HTTPException(400, f"유효하지 않은 상태: {cols['stock_status']}")
+    if "title" in cols and not (cols["title"] or "").strip():
+        raise HTTPException(400, "제목은 비울 수 없습니다")
+
+    with get_conn() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM books WHERE isbn13 = ?", (isbn13,)
+        ).fetchone():
+            raise HTTPException(404, "도서를 찾을 수 없습니다")
+
+        if cols:
+            # 빈 문자열은 NULL로 정규화(빈 텍스트 = 값 없음)
+            assignments = ", ".join(f"{c} = ?" for c in cols) + ", updated_at = datetime('now')"
+            params = [(v if v != "" else None) for v in cols.values()]
+            conn.execute(
+                f"UPDATE books SET {assignments} WHERE isbn13 = ?",
+                [*params, isbn13],
+            )
+
+        if dept_val is not None or cat_val is not None:
+            conn.execute(
+                """
+                INSERT INTO admin_overrides (isbn13, department, category, modified_at)
+                VALUES (?, ?, ?, datetime('now'))
+                ON CONFLICT(isbn13) DO UPDATE SET
+                  department  = COALESCE(excluded.department, admin_overrides.department),
+                  category    = COALESCE(excluded.category,   admin_overrides.category),
+                  modified_at = excluded.modified_at
+                """,
+                (isbn13, dept_val, cat_val),
+            )
+        conn.commit()
+
+    _refresh_derived()  # 편집 내용을 AI 인덱스 + 공개 JSON에 반영
     return {"ok": True}
 
 

@@ -89,11 +89,12 @@ function render(book) {
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
 
   // ── 긴 내용 블록 (값 없으면 제목까지 함께 제외) ──
+  // 관리자가 서식(HTML)을 넣은 필드는 정제 후 그대로, 평문은 줄바꿈 처리
   const sections = [
-    ['책 소개', formatDesc(book.full_description || book.description || '')],
-    ['저자 소개', formatDesc(book.author_intro || '')],
-    ['출판사 서평', formatDesc(book.publisher_description || '')],
-    ['추천사', formatDesc(book.endorsements || '')],
+    ['책 소개', renderRich(book.full_description || book.description || '')],
+    ['저자 소개', renderRich(book.author_intro || '')],
+    ['출판사 서평', renderRich(book.publisher_description || '')],
+    ['추천사', renderRich(book.endorsements || '')],
     ['인상적인 구절', formatQuotes(book.quotable_phrases)],
     ['목차', formatToc(book.toc || '')],
   ].filter(([, html]) => hasValue(html))
@@ -129,6 +130,13 @@ function render(book) {
         ${attachHtml}
       </div>
     </article>`;
+}
+
+// 관리자 서식(HTML)이 들어온 필드는 정제 후 그대로, 아니면 평문 줄바꿈 처리(하위호환)
+function renderRich(text) {
+  if (!text) return '';
+  if (looksLikeHtml(text)) return sanitizeHtml(text);
+  return formatDesc(text);
 }
 
 // 본문 텍스트용: 빈 줄(\n\n+)로 문단 분리, 문단 내 단일 줄바꿈(\n)은 한 줄 더 띄워(<br><br>) 표시.

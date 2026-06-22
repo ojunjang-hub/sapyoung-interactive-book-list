@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>관리자 — 사회평론 도서목록</title>
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -78,26 +78,12 @@
   <div class="admin-pagination" id="pagination"></div>
 </div>
 
-<!-- 편집 모달 -->
+<!-- 편집 모달 (전체 필드 + 서식 에디터) -->
 <div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('edit-modal')">
-  <div class="modal-box">
+  <div class="modal-box modal-box-lg">
     <h3 id="edit-modal-title" class="modal-title"></h3>
-    <div class="modal-form">
-      <label>부서</label>
-      <input type="text" id="edit-dept" list="dept-datalist" placeholder="부서명">
-      <datalist id="dept-datalist"></datalist>
-      <label>분류</label>
-      <input type="text" id="edit-cat" placeholder="분류명">
-      <label>재고 상태</label>
-      <select id="edit-status">
-        <option value="">변경 없음</option>
-        <option value="재고있음">재고있음</option>
-        <option value="품절">품절</option>
-        <option value="절판">절판</option>
-      </select>
-      <label>표지 URL</label>
-      <input type="url" id="edit-cover" placeholder="https://image.aladin.co.kr/…">
-    </div>
+    <datalist id="dept-datalist"></datalist>
+    <div id="edit-form" class="edit-form"></div>
     <div class="modal-actions">
       <button class="btn-primary" onclick="saveEdit()">저장</button>
       <button onclick="closeModal('edit-modal')">취소</button>
@@ -133,7 +119,7 @@
 </div>
 
 <script src="config.js"></script>
-<script src="util.js?v=2"></script>
-<script src="admin.js?v=2"></script>
+<script src="util.js?v=3"></script>
+<script src="admin.js?v=3"></script>
 </body>
 </html>

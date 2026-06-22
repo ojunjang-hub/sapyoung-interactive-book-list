@@ -35,7 +35,76 @@ function applyViewModeClass() {
   el.classList.toggle('mode-public', mode !== 'internal');
 }
 
+// ── 리치 텍스트 새니타이저 ──
+// 관리자가 입력한 서식 HTML을 화이트리스트로 정제(상세 페이지가 공개되므로 XSS 차단).
+// 저장 직전과 렌더 시 양쪽에서 호출한다.
+const _RT_TAGS = new Set(['P', 'DIV', 'BR', 'SPAN', 'B', 'STRONG', 'I', 'EM',
+  'U', 'S', 'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+const _RT_STYLE_PROPS = new Set(['text-align', 'font-weight', 'font-style',
+  'text-decoration', 'text-decoration-line', 'margin-left', 'padding-left',
+  'text-indent']);
+const _RT_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED',
+  'LINK', 'META', 'NOSCRIPT']);
+
+function looksLikeHtml(s) {
+  return /<(\/?)(p|div|br|span|b|strong|i|em|u|s|ul|ol|li|blockquote)\b[^>]*>/i
+    .test(String(s == null ? '' : s));
+}
+
+function _rtSafeStyle(style) {
+  const out = [];
+  String(style).split(';').forEach(decl => {
+    const i = decl.indexOf(':');
+    if (i < 0) return;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const val = decl.slice(i + 1).trim();
+    if (_RT_STYLE_PROPS.has(prop) && !/url\(|expression|javascript:|[<>]/i.test(val)) {
+      out.push(prop + ': ' + val);
+    }
+  });
+  return out.join('; ');
+}
+
+function sanitizeHtml(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(
+    '<div id="__rt">' + String(html) + '</div>', 'text/html');
+  const root = doc.getElementById('__rt');
+
+  (function clean(node) {
+    Array.from(node.childNodes).forEach(child => {
+      if (child.nodeType === 1) {
+        const tag = child.tagName.toUpperCase();
+        if (_RT_DROP.has(tag)) { child.remove(); return; }
+        clean(child);  // 자식 먼저 정제
+        if (!_RT_TAGS.has(tag)) {
+          // 허용되지 않은 태그는 내용만 남기고 벗겨낸다(unwrap)
+          const parent = child.parentNode;
+          while (child.firstChild) parent.insertBefore(child.firstChild, child);
+          parent.removeChild(child);
+          return;
+        }
+        Array.from(child.attributes).forEach(attr => {
+          if (attr.name.toLowerCase() === 'style') {
+            const safe = _rtSafeStyle(attr.value);
+            if (safe) child.setAttribute('style', safe);
+            else child.removeAttribute('style');
+          } else {
+            child.removeAttribute(attr.name);  // on*, href, class 등 전부 제거
+          }
+        });
+      } else if (child.nodeType === 8) {
+        child.remove();  // 주석 제거
+      }
+    });
+  })(root);
+
+  return root.innerHTML;
+}
+
 window.esc = esc;
 window.getViewMode = getViewMode;
 window.isInternal = isInternal;
 window.applyViewModeClass = applyViewModeClass;
+window.sanitizeHtml = sanitizeHtml;
+window.looksLikeHtml = looksLikeHtml;

@@ -6,6 +6,7 @@ let currentPage = 1;
 const PAGE_SIZE = 50;
 let tableItems = [];
 let editingIsbn = null;
+let editInitial = {};
 let filesIsbn = null;
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -183,17 +184,127 @@ function renderPagination(total, page) {
 
 // ─── Edit Modal ──────────────────────────────────────────────────────────────
 
-function openEdit(rowIndex) {
-  const b = tableItems[rowIndex];
-  if (!b) return;
-  editingIsbn = b.isbn13;
-  document.getElementById('edit-modal-title').textContent = b.title;
-  document.getElementById('edit-dept').value = b.department || '';
-  document.getElementById('edit-cat').value = b.category || '';
-  document.getElementById('edit-status').value = b.stock_status || '';
-  document.getElementById('edit-cover').value = b.cover_url || '';
+// 편집 가능한 전체 필드 정의 (순서대로 폼 생성)
+const EDIT_FIELDS = [
+  { key: 'title', label: '제목', type: 'text' },
+  { key: 'author', label: '저자', type: 'text' },
+  { key: 'publisher', label: '출판사', type: 'text' },
+  { key: 'pub_date', label: '출간일', type: 'text', ph: 'YYYY-MM-DD' },
+  { key: 'series', label: '시리즈', type: 'text' },
+  { key: 'pages', label: '쪽수', type: 'number' },
+  { key: 'price_standard', label: '정가', type: 'number' },
+  { key: 'price_sales', label: '판매가', type: 'number' },
+  { key: 'cover_url', label: '표지 URL', type: 'text', ph: 'https://image.aladin.co.kr/…' },
+  { key: 'stock_status', label: '재고 상태', type: 'select', options: ['', '재고있음', '품절', '절판'] },
+  { key: 'department', label: '부서', type: 'text', list: 'dept-datalist' },
+  { key: 'category', label: '분류', type: 'text' },
+  { key: 'description', label: '짧은 소개', type: 'rich' },
+  { key: 'full_description', label: '책 소개', type: 'rich' },
+  { key: 'publisher_description', label: '출판사 서평', type: 'rich' },
+  { key: 'author_intro', label: '저자 소개', type: 'rich' },
+  { key: 'endorsements', label: '추천사', type: 'rich' },
+  { key: 'quotable_phrases', label: '인상적인 구절 (빈 줄로 구분)', type: 'textarea' },
+  { key: 'toc', label: '목차', type: 'textarea' },
+];
+
+const RT_BTNS = [
+  ['bold', '<b>B</b>', '굵게'], ['italic', '<i>I</i>', '기울임'],
+  ['underline', '<u>U</u>', '밑줄'],
+  ['justifyLeft', '⯇', '왼쪽 정렬'], ['justifyCenter', '☰', '가운데 정렬'],
+  ['indent', '⇥', '들여쓰기'], ['outdent', '⇤', '내어쓰기'],
+  ['insertUnorderedList', '•', '목록'], ['removeFormat', '✕', '서식 지우기'],
+].map(([cmd, html, title]) =>
+  `<button type="button" data-cmd="${cmd}" title="${esc(title)}">${html}</button>`).join('');
+
+function fieldValue(book, key) {
+  if (key === 'quotable_phrases') {
+    const q = book.quotable_phrases;
+    if (Array.isArray(q)) return q.join('\n\n');
+    return q == null ? '' : String(q);
+  }
+  const v = book[key];
+  return v == null ? '' : String(v);
+}
+
+function fieldHtml(f, book) {
+  const val = fieldValue(book, f.key);
+  if (f.type === 'rich') {
+    return `<div class="ef-row ef-full">
+      <label>${esc(f.label)}</label>
+      <div class="rt-toolbar">${RT_BTNS}</div>
+      <div class="rt-editor" id="rt-${f.key}" contenteditable="true"></div>
+    </div>`;
+  }
+  if (f.type === 'textarea') {
+    return `<div class="ef-row ef-full">
+      <label>${esc(f.label)}</label>
+      <textarea class="edit-input" id="ef-${f.key}" rows="5">${esc(val)}</textarea>
+    </div>`;
+  }
+  if (f.type === 'select') {
+    const opts = f.options.map(o =>
+      `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o || '—')}</option>`).join('');
+    return `<div class="ef-row"><label>${esc(f.label)}</label>
+      <select class="edit-input" id="ef-${f.key}">${opts}</select></div>`;
+  }
+  const t = f.type === 'number' ? 'number' : 'text';
+  const listAttr = f.list ? ` list="${esc(f.list)}"` : '';
+  const ph = f.ph ? ` placeholder="${esc(f.ph)}"` : '';
+  return `<div class="ef-row"><label>${esc(f.label)}</label>
+    <input class="edit-input" id="ef-${f.key}" type="${t}"${listAttr}${ph} value="${esc(val)}"></div>`;
+}
+
+// 저장값 → 에디터 표시 HTML (HTML이면 정제, 평문이면 줄바꿈→<br>)
+function toEditorHtml(val) {
+  if (!val) return '';
+  return looksLikeHtml(val) ? sanitizeHtml(val) : esc(val).replace(/\n/g, '<br>');
+}
+
+// 에디터 innerHTML이 사실상 비었는지 (공백/빈 태그만) 판정
+function richIsEmpty(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return !tmp.textContent.trim() && !/<(img|ul|ol|table|hr)\b/i.test(html);
+}
+
+function bindRichToolbars() {
+  try { document.execCommand('styleWithCSS', false, true); } catch (_) {}
+  document.querySelectorAll('#edit-form .rt-toolbar button').forEach(btn => {
+    btn.onmousedown = e => e.preventDefault();  // 에디터 선택 유지
+    btn.onclick = () => { try { document.execCommand(btn.dataset.cmd, false, null); } catch (_) {} };
+  });
+}
+
+async function openEdit(rowIndex) {
+  const b0 = tableItems[rowIndex];
+  if (!b0) return;
+  editingIsbn = b0.isbn13;
+  editInitial = {};
+  document.getElementById('edit-modal-title').textContent = b0.title || b0.isbn13;
   document.getElementById('edit-msg').textContent = '';
+  const form = document.getElementById('edit-form');
+  form.innerHTML = '<p class="muted">불러오는 중…</p>';
   document.getElementById('edit-modal').style.display = 'flex';
+
+  // 전체 필드 로드 (상세 API가 편집 가능한 컬럼을 모두 반환)
+  let book = b0;
+  try {
+    const r = await fetch(`${API}/books/${encodeURIComponent(editingIsbn)}`, { headers: adminHeaders() });
+    if (r.ok) book = await r.json();
+  } catch (_) { /* 폴백: 목록 데이터 */ }
+
+  form.innerHTML = EDIT_FIELDS.map(f => fieldHtml(f, book)).join('');
+
+  EDIT_FIELDS.forEach(f => {
+    if (f.type === 'rich') {
+      const ed = document.getElementById('rt-' + f.key);
+      ed.innerHTML = toEditorHtml(fieldValue(book, f.key));
+      editInitial[f.key] = sanitizeHtml(ed.innerHTML);
+    } else {
+      editInitial[f.key] = fieldValue(book, f.key);
+    }
+  });
+  bindRichToolbars();
 }
 
 function closeModal(id) {
@@ -202,50 +313,42 @@ function closeModal(id) {
 
 async function saveEdit() {
   if (!editingIsbn) return;
-  const dept = document.getElementById('edit-dept').value.trim();
-  const cat = document.getElementById('edit-cat').value.trim();
-  const status = document.getElementById('edit-status').value;
-  const cover = document.getElementById('edit-cover').value.trim();
   const msg = document.getElementById('edit-msg');
-
   msg.textContent = '저장 중…';
   msg.className = 'modal-msg';
 
-  try {
-    const reqs = [];
-
-    if (dept || cat) {
-      reqs.push(fetch(`${API}/admin/books/${editingIsbn}/classification`, {
-        method: 'PATCH',
-        headers: adminHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ department: dept || null, category: cat || null }),
-      }));
-    }
-    if (status) {
-      reqs.push(fetch(`${API}/admin/books/${editingIsbn}/status`, {
-        method: 'PATCH',
-        headers: adminHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ stock_status: status }),
-      }));
-    }
-    if (cover) {
-      reqs.push(fetch(`${API}/admin/books/${editingIsbn}/cover`, {
-        method: 'PATCH',
-        headers: adminHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ cover_url: cover }),
-      }));
-    }
-
-    if (!reqs.length) { msg.textContent = '변경 사항 없음'; return; }
-
-    const results = await Promise.all(reqs);
-    if (results.some(r => !r.ok)) {
-      msg.textContent = '일부 항목 저장 실패';
-      msg.className = 'modal-msg error';
+  // 변경된 필드만 수집
+  const payload = {};
+  for (const f of EDIT_FIELDS) {
+    let val;
+    if (f.type === 'rich') {
+      const ed = document.getElementById('rt-' + f.key);
+      val = sanitizeHtml(ed ? ed.innerHTML : '');
+      if (richIsEmpty(val)) val = '';
     } else {
+      const el = document.getElementById('ef-' + f.key);
+      val = el ? el.value.trim() : '';
+    }
+    if (val === (editInitial[f.key] ?? '')) continue;  // 변경 없음
+    payload[f.key] = (f.type === 'number') ? (val === '' ? null : Number(val)) : val;
+  }
+
+  if (!Object.keys(payload).length) { msg.textContent = '변경 사항 없음'; return; }
+
+  try {
+    const r = await fetch(`${API}/admin/books/${encodeURIComponent(editingIsbn)}`, {
+      method: 'PATCH',
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
       msg.textContent = '저장 완료';
       msg.className = 'modal-msg success';
       setTimeout(() => { closeModal('edit-modal'); loadBooks(currentPage); }, 700);
+    } else {
+      const e = await r.json().catch(() => ({}));
+      msg.textContent = `저장 실패: ${e.detail || r.status}`;
+      msg.className = 'modal-msg error';
     }
   } catch {
     msg.textContent = '저장 중 오류 발생';

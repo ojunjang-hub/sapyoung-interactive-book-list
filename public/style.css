@@ -833,6 +833,64 @@ a { color: inherit; }
   border-radius: 6px;
   width: 100%;
 }
+/* 종합 편집 모달 (전체 필드 + 서식 에디터) */
+.modal-box-lg { max-width: 760px; }
+.edit-form {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.edit-form .ef-row { display: contents; }
+.edit-form .ef-row > label { font-size: 13px; color: var(--muted); }
+.edit-form .ef-full { grid-column: 1 / -1; display: block; }
+.edit-form .ef-full > label { display: block; margin: 6px 0 6px; font-weight: 600; color: var(--fg); }
+.edit-input {
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+textarea.edit-input { resize: vertical; line-height: 1.6; }
+.rt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: #f7f7f7;
+}
+.rt-toolbar button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 14px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+.rt-toolbar button:hover { background: #fff; border-color: var(--line); }
+.rt-editor {
+  border: 1px solid var(--line);
+  border-radius: 0 0 6px 6px;
+  padding: 10px 12px;
+  min-height: 90px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.7;
+  outline: none;
+}
+.rt-editor:focus { border-color: var(--accent); }
+.rt-editor blockquote { margin: 0 0 0 24px; }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .modal-msg {
   font-size: 13px;
