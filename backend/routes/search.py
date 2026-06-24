@@ -18,6 +18,9 @@ _book_index: str = ""
 # 13자리 ISBN을 잘못 옮겨 적는 문제를 방지한다.
 _index_isbns: list[str] = []
 
+# 요청마다 새로 만들지 않고 재사용하는 Anthropic 클라이언트(연결 풀 재사용).
+_client = None
+
 # ── 간단한 IP별 슬라이딩 윈도우 레이트리밋 (단일 프로세스 인메모리) ──
 _RATE_WINDOW = 60.0
 _rate_log: dict[str, deque] = {}
@@ -29,11 +32,6 @@ def _check_rate(ip: str) -> None:
     dq = _rate_log.setdefault(ip, deque())
     while dq and now - dq[0] > _RATE_WINDOW:
         dq.popleft()
-    if not dq:
-        # 비어 있으면 키 누적을 막기 위해 제거 후 빠르게 통과
-        _rate_log.pop(ip, None)
-        _rate_log[ip] = deque([now])
-        return
     if len(dq) >= limit:
         raise HTTPException(429, "요청이 너무 잦습니다. 잠시 후 다시 시도하세요.")
     dq.append(now)
@@ -141,8 +139,10 @@ class SearchRequest(BaseModel):
     query: str
 
 
+# 동기 블로킹 핸들러(sqlite + 수 초가 걸리는 모델 호출)이므로 async가 아닌 def로
+# 선언해 FastAPI가 스레드풀에서 실행하게 한다(이벤트 루프를 막지 않음).
 @router.post("/natural")
-async def natural_search(req: SearchRequest, request: Request):
+def natural_search(req: SearchRequest, request: Request):
     _check_rate(request.client.host if request.client else "unknown")
 
     if not _book_index:
@@ -154,7 +154,10 @@ async def natural_search(req: SearchRequest, request: Request):
 
     import anthropic  # lazy import — only needed when actually called
 
-    client = anthropic.Anthropic(api_key=api_key)
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=api_key)
+    client = _client
     user_msg = _USER_TEMPLATE.format(query=req.query)
     # 고정 인덱스는 캐시되는 system 블록, 가변 질의는 user 메시지로 분리
     system_blocks = [

@@ -69,7 +69,7 @@ def _build_filters(
 
 
 @router.get("/books")
-async def list_books(
+def list_books(
     q: str | None = Query(None),
     department: str | None = Query(None),
     category: str | None = Query(None),
@@ -112,7 +112,7 @@ async def list_books(
 
 
 @router.get("/filters")
-async def get_filters():
+def get_filters():
     with get_conn() as conn:
 
         def distinct(col: str) -> list[str]:
@@ -152,7 +152,7 @@ async def get_filters():
 
 
 @router.get("/books/{isbn13}")
-async def get_book(isbn13: str):
+def get_book(isbn13: str):
     with get_conn() as conn:
         row = conn.execute(
             f"SELECT {DETAIL_COLUMNS} FROM books_effective WHERE isbn13 = ?",
