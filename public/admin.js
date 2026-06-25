@@ -521,7 +521,8 @@ async function addBookByIsbn() {
       return;
     }
     result.className = 'add-book-result success';
-    result.textContent = `추가 완료: 『${data.title}』`;
+    result.textContent = (data.action === 'updated' ? '덮어쓰기 완료' : '추가 완료')
+      + `: 『${data.title}』`;
     input.value = '';
     search();  // 목록 새로고침
   } catch (e) {

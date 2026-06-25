@@ -1,11 +1,13 @@
 import json
 import logging
+import re
 import sqlite3
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from aladin_scrape import scrape_contents
 from auth import verify_admin
 from config import settings
 from database import get_conn
@@ -109,6 +111,18 @@ async def _fetch_aladin(isbn13: str) -> dict:
     return items[0]
 
 
+# 알라딘 표지 URL의 크기 세그먼트(coversum/cover500/…)를 cover200으로 정규화.
+# API의 cover 필드는 coversum(89px) 저해상도를 주므로, 정본 데이터와 동일하게
+# cover200으로 맞춰야 그리드는 200px, 상세는 book.js가 cover500으로 치환한다.
+_COVER_SIZE_RE = re.compile(r"(/product/\d+/\d+/)[^/]+/")
+
+
+def _cover200(url: str | None) -> str | None:
+    if not url:
+        return url
+    return _COVER_SIZE_RE.sub(r"\1cover200/", url, count=1)
+
+
 def _map_aladin_item(item: dict) -> dict:
     sub = item.get("subInfo") or {}
     series_info = item.get("seriesInfo") or {}
@@ -138,13 +152,14 @@ def _map_aladin_item(item: dict) -> dict:
         "category_src": category_src,
         "price_standard": item.get("priceStandard"),
         "price_sales": item.get("priceSales"),
-        "cover_url": item.get("cover"),
+        "cover_url": _cover200(item.get("cover")),  # coversum → cover200 정규화
         "description": item.get("description"),
         "stock_status": item.get("stockStatus") or "재고있음",
         "series": series_info.get("seriesName"),
+        # 목차·상세는 item 최상위/ subInfo에서(지시서 매핑 기준). API가 비워 주면 그대로 빈 값.
         "toc": sub.get("toc"),
-        "full_description": sub.get("fulldescription"),
-        "publisher_description": sub.get("fulldescription2"),
+        "full_description": item.get("fullDescription"),
+        "publisher_description": item.get("fullDescription2"),
         "aladin_category": json.dumps(aladin_category, ensure_ascii=False),
         "store_links": json.dumps(store_links, ensure_ascii=False),
         "aladin_enriched": 1,
@@ -156,37 +171,70 @@ async def verify_key(_: str = Depends(verify_admin)):
     return {"ok": True}
 
 
+# 이미 있는 도서를 덮어쓸 때는 알라딘 서지 데이터만 갱신하고,
+# 관리자 분류(부서/분야 출처)는 보존한다. admin_overrides는 애초에 건드리지 않는다.
+_PRESERVE_ON_OVERWRITE = {"department_src", "category_src"}
+
+
+def _overwrite_book(conn, isbn: str, fields: dict) -> None:
+    upd = {k: v for k, v in fields.items() if k not in _PRESERVE_ON_OVERWRITE}
+    assignments = ", ".join(f"{c} = ?" for c in upd) + ", updated_at = datetime('now')"
+    conn.execute(
+        f"UPDATE books SET {assignments} WHERE isbn13 = ?",
+        [*upd.values(), isbn],
+    )
+
+
 @router.post("/books/add")
 async def add_book_by_isbn(body: AddBookRequest, _: str = Depends(verify_admin)):
     isbn = body.isbn13.strip().replace("-", "")
     if not isbn.isdigit() or len(isbn) != 13:
         raise HTTPException(400, "ISBN13 형식이 올바르지 않습니다 (13자리 숫자)")
 
-    with get_conn() as conn:
-        if conn.execute("SELECT 1 FROM books WHERE isbn13 = ?", (isbn,)).fetchone():
-            raise HTTPException(409, "이미 목록에 있는 도서입니다")
-
     item = await _fetch_aladin(isbn)
     fields = _map_aladin_item(item)
 
-    cols = ["isbn13"] + list(fields.keys())
-    vals = [isbn] + list(fields.values())
-    placeholders = ", ".join(["?"] * len(cols))
-    col_sql = ", ".join(cols)
+    # 목차·책소개·저자소개·출판사 서평은 API가 비워 주므로 상품 페이지 스크래핑으로 보충.
+    # API가 채워 준 값이 있으면 그것을 우선하고, 빈 필드만 스크래핑 결과로 메운다.
+    scraped = await scrape_contents(isbn, item.get("link"))
+    for k, v in scraped.items():
+        if v and not (fields.get(k) or "").strip():
+            fields[k] = v
 
     with get_conn() as conn:
-        try:
-            conn.execute(
-                f"INSERT INTO books ({col_sql}) VALUES ({placeholders})",
-                vals,
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            # 사전 확인과 INSERT 사이의 경쟁 조건(중복 추가) 방어
-            raise HTTPException(409, "이미 목록에 있는 도서입니다")
+        exists = conn.execute(
+            "SELECT 1 FROM books WHERE isbn13 = ?", (isbn,)
+        ).fetchone()
 
-    _refresh_derived()  # 신간을 AI 검색 인덱스 + 공개 JSON에 반영
-    return {"ok": True, "isbn13": isbn, "title": fields.get("title"), "cover_url": fields.get("cover_url")}
+        if exists:
+            # 이미 있는 도서 → 알라딘 최신 데이터로 덮어쓰기(분류는 보존)
+            _overwrite_book(conn, isbn, fields)
+            action = "updated"
+        else:
+            cols = ["isbn13"] + list(fields.keys())
+            vals = [isbn] + list(fields.values())
+            placeholders = ", ".join(["?"] * len(cols))
+            col_sql = ", ".join(cols)
+            try:
+                conn.execute(
+                    f"INSERT INTO books ({col_sql}) VALUES ({placeholders})",
+                    vals,
+                )
+                action = "added"
+            except sqlite3.IntegrityError:
+                # 확인과 INSERT 사이의 경쟁 조건 → 덮어쓰기로 처리
+                _overwrite_book(conn, isbn, fields)
+                action = "updated"
+        conn.commit()
+
+    _refresh_derived()  # 추가/갱신을 AI 검색 인덱스 + 공개 JSON에 반영
+    return {
+        "ok": True,
+        "action": action,
+        "isbn13": isbn,
+        "title": fields.get("title"),
+        "cover_url": fields.get("cover_url"),
+    }
 
 
 @router.get("/books")
