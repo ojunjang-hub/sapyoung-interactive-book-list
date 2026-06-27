@@ -30,6 +30,13 @@
 - **상세 페이지 정리**: 판매가·알라딘 분류 제거(판매지수는 내부 뷰 전용).
 - **보안 보강**: 관리자 키 fail-closed(`changeme`/빈값 거부), 상수시간 비교, 파일 업로드 경로 정제·크기 제한, AI 검색 IP 레이트리밋, 알라딘 키 `.env` 이전, 상세 API 컬럼 화이트리스트, 관리자 쓰기 시 AI 인덱스·공개 JSON 자동 재생성, 프롬프트 캐싱.
 
+### 최근 추가 (2026-06-28)
+
+- **표지 서버 로컬 저장**: 알라딘 CDN 의존을 끊고 표지를 서버에 직접 저장(`public/covers/{isbn}.jpg` 그리드, `public/covers/lg/…` 상세). DB `cover_url`은 로컬 경로, 원본은 `cover_remote_url`에 보존. 기존 도서 세부정보(목차·저자소개·출판사 서평) 일괄 스크래핑 보충.
+- **목록 다운로드(엑셀/PDF)**: 목록 화면에서 현재 보이는 목록(필터·검색·정렬 반영, 없으면 전체)을 정본 DB에서 즉석 생성해 내려받기. 엑셀(openpyxl)·PDF(reportlab, 한글 CID 폰트).
+- **상세 표지 확대**: 상세 페이지 표지 클릭 시 전체화면 라이트박스, 다시 클릭/Esc로 닫기.
+- **신간 가로 이동 버튼**: 첫 화면 '새로 나온 책' 스트립에 좌우 이동 버튼.
+
 ---
 
 ## 도서 데이터
@@ -55,7 +62,8 @@
 | DB | SQLite (WAL 모드, `books_effective` 뷰) |
 | 프런트 | 바닐라 HTML/CSS/JS (빌드 도구 없음) |
 | AI 검색 | Claude Haiku (`claude-haiku-4-5-20251001`) + 프롬프트 캐싱 |
-| 이미지 | 알라딘 CDN (`cover200` 썸네일, `cover500` 상세) |
+| 이미지 | 서버 로컬 저장 (`public/covers`, `cover200` 그리드 / `cover500` 상세) |
+| 내보내기 | openpyxl(.xlsx) · reportlab(.pdf, 한글 CID 폰트) |
 
 ---
 
@@ -72,11 +80,13 @@ sapyoung_interactive_book_list/
 │   ├── database.py             # SQLite 연결 헬퍼
 │   ├── auth.py                 # 관리자 인증 (X-Admin-Key, fail-closed)
 │   ├── publish.py              # 공개용 정적 JSON(books.json) 재생성
+│   ├── aladin_scrape.py        # 알라딘 상품페이지 스크래핑(세부정보·표지 보충)
 │   └── routes/
 │       ├── books.py            # 도서 목록·상세·필터 API
 │       ├── admin.py            # 관리자 CRUD + 신간 추가 API
 │       ├── files.py            # 파일 업로드·다운로드·삭제
-│       └── search.py           # Claude AI 자연어 검색 (레이트리밋)
+│       ├── search.py           # Claude AI 자연어 검색 (레이트리밋)
+│       └── export.py           # 도서목록 엑셀/PDF 내보내기
 ├── public/                     # 정적 파일 (FastAPI가 서빙)
 │   ├── index.html / main.js    # 목록 페이지 (그리드 + 검색 토글 + 라우팅)
 │   ├── book.html / book.js     # 상세 페이지
@@ -84,6 +94,7 @@ sapyoung_interactive_book_list/
 │   ├── util.js                 # 공통 유틸 (esc, 뷰 모드)
 │   ├── config.js               # API 베이스 URL 설정
 │   ├── style.css               # 공통 스타일
+│   ├── covers/                 # 로컬 표지 이미지 (git 미추적, 별도 전송/재생성)
 │   └── data/books.json         # 공개용 정적 스냅샷 (백엔드 폴백)
 ├── _workspace/                 # 빌드 중간 산출물·일회성 스크립트 (git 미추적)
 └── .claude/                    # 하네스 에이전트·스킬 정의 (git 미추적)
@@ -113,7 +124,7 @@ CORS_ORIGINS=http://localhost:8000
 ### 2. 의존성 설치
 
 ```bash
-pip install fastapi uvicorn pydantic-settings python-multipart anthropic httpx
+pip install -r requirements.txt
 ```
 
 ### 3. 서버 실행
@@ -163,6 +174,7 @@ python -m uvicorn main:app --app-dir backend --reload --port 8000
 | GET | `/api/filters` | 필터 옵션 (부서·분류·시리즈·연도) |
 | GET | `/api/books/{isbn13}/attachments/{id}` | 첨부파일 다운로드 |
 | POST | `/api/search/natural` | AI 자연어 검색 (IP 레이트리밋) |
+| POST | `/api/export/books?format=xlsx\|pdf` | 도서목록 내보내기 (body `{isbns?}`: 주면 그 목록·순서, 비우면 전체) |
 
 ### 관리자 API (X-Admin-Key 헤더 필요)
 
@@ -238,14 +250,17 @@ ISBN13 기반으로 `book.js`에서 직접 생성하며 모두 새 탭에서 열
 
 ### 표지 이미지 규격
 
+표지는 **서버에 로컬 저장**한다(알라딘 CDN 의존 제거).
+
 | 경로 | 크기 | 용도 |
 |------|------|------|
-| `cover200` | ~10KB / 200px | 목록 그리드 썸네일 |
-| `cover500` | ~37KB / 500px | 상세 페이지 커버 |
-| `coversum` | ~3KB / 89px | 저화질 |
+| `public/covers/{isbn}.jpg` | ~10KB / 200px | 목록 그리드 썸네일 |
+| `public/covers/lg/{isbn}.jpg` | ~37KB+ / 500px | 상세 페이지 커버 |
 
-DB와 books.json의 `cover_url`은 `cover200`으로 저장. 상세 페이지(`book.js`)에서 `cover500`으로 치환하여 표시.
-표지가 없는 책은 목록·신간 영역에서 후순위로 정렬되며, 누락분은 알라딘 ItemLookUp으로 재수급(`_workspace/enrich_covers.py`).
+DB·books.json의 `cover_url`은 로컬 경로(`/covers/{isbn}.jpg`), 원본 알라딘 URL은 `cover_remote_url`에 보존.
+상세(`book.js`)는 `/covers/lg/`(고해상도)로 치환해 표시한다.
+`public/covers/`는 git 미추적(대용량·재생성 가능) — `_workspace/backfill_details_covers.py`로 `cover_remote_url`에서 재다운로드 가능.
+표지가 없는 책은 목록·신간 영역에서 후순위로 정렬된다.
 
 ---
 

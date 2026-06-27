@@ -21,7 +21,7 @@ class HTMLNoCacheStatics(StaticFiles):
         if ctype.startswith("text/html"):
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
-from routes import admin, books, files, search
+from routes import admin, books, export, files, search
 from routes.search import load_index
 
 
@@ -44,6 +44,7 @@ app.include_router(books.router, prefix="/api")
 app.include_router(admin.router, prefix="/api/admin")
 app.include_router(files.router, prefix="/api")
 app.include_router(search.router, prefix="/api/search")
+app.include_router(export.router, prefix="/api/export")
 
 
 @app.get("/api/health")

@@ -8,6 +8,8 @@ const PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
 );
 
 let allBooks = [];
+// 현재 일반검색 그리드에 렌더된 목록(다운로드 버튼이 이 목록을 내보낸다)
+let lastRenderedBooks = [];
 
 // esc()는 util.js에서 전역 제공
 
@@ -418,8 +420,45 @@ function sortBooks(books, key) {
 function render() {
   const f    = getFilters();
   const list = sortBooks(applyFilters(allBooks, f), f.sort);
+  lastRenderedBooks = list;
   renderGrid(list);
 }
+
+// ─── 내보내기(엑셀/PDF) ───────────────────────────────────────────────────────
+// 현재 화면 목록의 ISBN을 서버로 보내 정확히 그 목록을 파일로 받는다.
+// (필터가 없으면 전체 목록이 그대로 내보내진다 = 최신 전체 카탈로그)
+async function exportBooks(format) {
+  const books = lastRenderedBooks.length ? lastRenderedBooks : allBooks;
+  const isbns = books.map(b => b.isbn13).filter(Boolean);
+  if (!isbns.length) { alert('내려받을 도서가 없습니다.'); return; }
+
+  const btns = document.querySelectorAll('.export-btn');
+  btns.forEach(b => (b.disabled = true));
+  try {
+    const resp = await fetch(`${CONFIG.API_BASE}/api/export/books?format=${format}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isbns }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob = await resp.blob();
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `사회평론_도서목록_${today}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('내려받기에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+  } finally {
+    btns.forEach(b => (b.disabled = false));
+  }
+}
+window.exportBooks = exportBooks;
 
 function renderGrid(books) {
   const grid = document.getElementById('book-grid');

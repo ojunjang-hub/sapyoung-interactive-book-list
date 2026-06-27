@@ -344,6 +344,36 @@ a { color: inherit; }
   padding: 8px 16px;
   font-size: 13px;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* 내보내기(엑셀/PDF) 버튼 */
+.export-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-label { font-size: 12px; color: var(--muted); }
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s, color .15s, opacity .15s;
+}
+.export-btn:hover { background: var(--accent); color: #fff; }
+.export-btn:disabled { opacity: .5; cursor: progress; }
+@media (max-width: 640px) {
+  .export-label { display: none; }
 }
 
 /* ---- Grid ---- */
