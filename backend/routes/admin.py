@@ -7,9 +7,9 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from aladin_scrape import scrape_contents
+from aladin_scrape import download_cover, scrape_contents
 from auth import verify_admin
-from config import settings
+from config import PROJECT_ROOT, settings
 from database import get_conn
 from publish import rebuild_public_json
 from routes.search import load_index
@@ -200,6 +200,15 @@ async def add_book_by_isbn(body: AddBookRequest, _: str = Depends(verify_admin))
     for k, v in scraped.items():
         if v and not (fields.get(k) or "").strip():
             fields[k] = v
+
+    # 표지를 서버에 직접 저장하고 cover_url을 로컬 경로로 교체(알라딘 CDN 의존 제거).
+    # 원본 URL은 cover_remote_url에 보존. 실패하면 원격 URL을 그대로 둔다.
+    local_cover = await download_cover(
+        isbn, fields.get("cover_url"), PROJECT_ROOT / "public" / "covers"
+    )
+    if local_cover:
+        fields["cover_remote_url"] = fields.get("cover_url")
+        fields["cover_url"] = local_cover
 
     with get_conn() as conn:
         exists = conn.execute(

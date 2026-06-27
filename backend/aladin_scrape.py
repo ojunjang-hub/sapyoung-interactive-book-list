@@ -17,10 +17,12 @@ ItemLookUp API가 목차·책소개·저자소개·출판사 서평을 비워서
 import html as _html
 import logging
 import re
+from pathlib import Path
 
 import httpx
 
 _GETCONTENTS = "https://www.aladin.co.kr/shop/product/getContents.aspx"
+_WPRODUCT = "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN="
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
 # 본문에 섞여 들어오는 내비/안내 문구 — 해당 문구가 든 줄은 버린다.
@@ -102,13 +104,53 @@ async def _get(client: httpx.AsyncClient, isbn: str, name: str) -> str | None:
         return None
 
 
+async def _img(client: httpx.AsyncClient, url: str) -> bytes | None:
+    try:
+        r = await client.get(url)
+        if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+            return r.content
+    except Exception:
+        pass
+    return None
+
+
+async def download_cover(isbn13: str, cover200_url: str | None, covers_dir) -> str | None:
+    """알라딘 CDN 표지를 받아 로컬 저장하고 공개 경로(/covers/{isbn}.jpg)를 반환.
+
+    그리드용 cover200은 {covers_dir}/{isbn}.jpg, 상세용 cover500은
+    {covers_dir}/lg/{isbn}.jpg 로 저장한다. cover500이 없으면 cover200으로 대체.
+    알라딘 URL이 아니거나 실패하면 None(호출자가 원격 URL을 그대로 쓰게).
+    """
+    if not cover200_url or "aladin" not in cover200_url:
+        return None
+    covers_dir = Path(covers_dir)
+    sm = covers_dir / f"{isbn13}.jpg"
+    lg = covers_dir / "lg" / f"{isbn13}.jpg"
+    try:
+        async with httpx.AsyncClient(
+            timeout=15, follow_redirects=True, headers={"User-Agent": _UA}
+        ) as client:
+            b200 = await _img(client, cover200_url)
+            if not b200:
+                return None
+            sm.parent.mkdir(parents=True, exist_ok=True)
+            sm.write_bytes(b200)
+            lg.parent.mkdir(parents=True, exist_ok=True)
+            b500 = await _img(client, cover200_url.replace("cover200", "cover500"))
+            lg.write_bytes(b500 or b200)
+        return f"/covers/{isbn13}.jpg"
+    except Exception:
+        logging.warning("표지 다운로드 실패(isbn=%s)", isbn13, exc_info=True)
+        return None
+
+
 async def scrape_contents(isbn13: str, referer: str | None = None) -> dict:
     """상품 페이지 콘텐츠를 긁어 {toc, full_description, author_intro,
     publisher_description} 중 채워진 것만 반환. 실패는 조용히 건너뛴다."""
     result: dict[str, str] = {}
-    headers = {"User-Agent": _UA}
-    if referer:
-        headers["Referer"] = referer
+    # getContents.aspx는 Referer가 없으면 빈 응답(2바이트)을 준다. 호출자가 상품
+    # 링크를 안 주면 ISBN으로 상품 페이지 URL을 만들어 Referer로 쓴다.
+    headers = {"User-Agent": _UA, "Referer": referer or (_WPRODUCT + isbn13)}
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
             intro = await _get(client, isbn13, "Introduce")

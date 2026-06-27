@@ -101,6 +101,13 @@ function render(book) {
     .map(([title, html]) => `<div class="description"><h3>${esc(title)}</h3>${html}</div>`)
     .join('');
 
+  // 표지: 로컬 저장본(/covers/{isbn}.jpg)이면 상세는 고해상도 lg 버전을 쓴다.
+  // 아직 알라딘 URL이면(신간·폴백) 기존처럼 cover200→cover500 치환.
+  const coverSm = book.cover_url || '';
+  const coverLg = coverSm.startsWith('/covers/')
+    ? coverSm.replace('/covers/', '/covers/lg/')
+    : coverSm.replace('cover200', 'cover500');
+
   const attachments = Array.isArray(book.attachments) ? book.attachments : [];
 
   const attachHtml = attachments.length ? `
@@ -118,8 +125,8 @@ function render(book) {
   document.getElementById('detail-root').innerHTML = `
     <article class="detail">
       <div class="cover">
-        <img src="${esc((book.cover_url || '').replace('cover200', 'cover500'))}" alt="${esc(book.title)}"
-             onerror="this.onerror=null;this.src=window.PLACEHOLDER">
+        <img src="${esc(coverLg)}" alt="${esc(book.title)}" data-sm="${esc(coverSm)}"
+             onerror="if(this.dataset.sm&&this.src.indexOf('/lg/')>-1){this.src=this.dataset.sm}else{this.onerror=null;this.src=window.PLACEHOLDER}">
       </div>
       <div class="info">
         <h2>${esc(book.title)}${statusBadge}</h2>

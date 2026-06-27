@@ -17,6 +17,10 @@ books.db
 # 스토리지 (업로드 파일) — config FILE_STORAGE_PATH=./storage 기준 루트 경로
 storage/
 
+# 로컬 표지 이미지 (대용량·재생성 가능: books.db의 cover_remote_url로 재다운로드)
+# 서버 이식 시 books.db처럼 별도 전송하거나 백필 스크립트로 재생성한다.
+public/covers/
+
 # 작업 디렉토리 (스크립트 중간 산출물)
 _workspace/
 
