@@ -176,6 +176,7 @@ a { color: inherit; }
 .newbooks-section {
   padding: 32px 20px 0;
 }
+.newbooks-viewport { position: relative; }
 .newbooks-strip {
   display: flex;
   gap: 14px;
@@ -183,6 +184,44 @@ a { color: inherit; }
   padding-bottom: 16px;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* 신간 스트립 좌우 이동 버튼 */
+.newbooks-nav {
+  position: absolute;
+  top: 90px;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--accent);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 14px rgba(0,0,0,.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s, background .15s, box-shadow .15s, opacity .15s;
+}
+.newbooks-nav:hover {
+  background: #1c2b3a;
+  transform: translateY(-50%) scale(1.12);
+  box-shadow: 0 5px 18px rgba(0,0,0,.4);
+}
+.newbooks-nav:active { transform: translateY(-50%) scale(1.02); }
+.newbooks-nav.prev { left: -14px; }
+.newbooks-nav.next { right: -14px; }
+.newbooks-nav.hidden { opacity: 0; pointer-events: none; }
+@media (max-width: 640px) {
+  /* 모바일은 터치 스와이프로 충분 — 버튼 숨김 */
+  .newbooks-nav { display: none; }
 }
 .newbooks-strip::-webkit-scrollbar { height: 4px; }
 .newbooks-strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
@@ -398,6 +437,32 @@ a { color: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,.14);
   background: #f0f0f0;
   display: block;
+}
+.detail .cover img.zoomable { cursor: zoom-in; }
+
+/* 표지 확대 라이트박스 */
+.cover-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0,0,0,.85);
+  cursor: zoom-out;
+  animation: cover-lightbox-in .15s ease;
+}
+.cover-lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+@keyframes cover-lightbox-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* 제목·저자 */

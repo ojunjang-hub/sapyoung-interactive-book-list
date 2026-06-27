@@ -268,6 +268,33 @@ function loadNewBooks() {
       <p class="newbook-title">${esc(b.title)}</p>
     </a>
   `).join('');
+
+  setupNewbooksNav(strip);
+}
+
+// '새로 나온 책' 가로 스트립의 좌우 이동 버튼. 한 번에 보이는 영역의 80%만큼
+// 부드럽게 스크롤하고, 양 끝에서는 해당 버튼을 숨긴다.
+function setupNewbooksNav(strip) {
+  const prev = document.getElementById('newbooks-prev');
+  const next = document.getElementById('newbooks-next');
+  if (!prev || !next) return;
+
+  const pageBy = () => Math.max(240, Math.round(strip.clientWidth * 0.8));
+  const update = () => {
+    const maxLeft = strip.scrollWidth - strip.clientWidth - 1;
+    const scrollable = maxLeft > 0;
+    prev.classList.toggle('hidden', !scrollable || strip.scrollLeft <= 0);
+    next.classList.toggle('hidden', !scrollable || strip.scrollLeft >= maxLeft);
+  };
+
+  prev.onclick = () => strip.scrollBy({ left: -pageBy(), behavior: 'smooth' });
+  next.onclick = () => strip.scrollBy({ left: pageBy(), behavior: 'smooth' });
+  strip.onscroll = update;
+  if (!setupNewbooksNav._resizeBound) {
+    window.addEventListener('resize', () => update());
+    setupNewbooksNav._resizeBound = true;
+  }
+  update();
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────

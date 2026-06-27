@@ -15,7 +15,7 @@
       } catch (e) { document.documentElement.classList.add('mode-public'); }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header class="site-header">
@@ -74,8 +74,12 @@
     <!-- 섹션 3: 신간 -->
     <section class="newbooks-section">
       <h2 class="section-title">새로 나온 책</h2>
-      <div class="newbooks-strip" id="newbooks-strip">
-        <div class="newbooks-loading">불러오는 중…</div>
+      <div class="newbooks-viewport">
+        <button class="newbooks-nav prev hidden" id="newbooks-prev" type="button" aria-label="이전 책 보기">&lsaquo;</button>
+        <div class="newbooks-strip" id="newbooks-strip">
+          <div class="newbooks-loading">불러오는 중…</div>
+        </div>
+        <button class="newbooks-nav next hidden" id="newbooks-next" type="button" aria-label="다음 책 보기">&rsaquo;</button>
       </div>
     </section>
 
@@ -130,6 +134,6 @@
 
   <script src="config.js?v=3"></script>
   <script src="util.js?v=3"></script>
-  <script src="main.js?v=6"></script>
+  <script src="main.js?v=7"></script>
 </body>
 </html>

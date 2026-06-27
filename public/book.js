@@ -126,6 +126,7 @@ function render(book) {
     <article class="detail">
       <div class="cover">
         <img src="${esc(coverLg)}" alt="${esc(book.title)}" data-sm="${esc(coverSm)}"
+             class="zoomable" onclick="window.openCoverLightbox(this.src, this.alt)"
              onerror="if(this.dataset.sm&&this.src.indexOf('/lg/')>-1){this.src=this.dataset.sm}else{this.onerror=null;this.src=window.PLACEHOLDER}">
       </div>
       <div class="info">
@@ -199,6 +200,24 @@ function normalizeLinks(raw) {
   }
   return raw;
 }
+
+// 표지 확대(라이트박스): 표지를 클릭하면 전체 화면 오버레이로 크게 보여주고,
+// 오버레이(또는 Esc)를 다시 누르면 닫는다.
+function openCoverLightbox(src, alt) {
+  if (!src || src === window.PLACEHOLDER) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'cover-lightbox';
+  overlay.innerHTML = `<img src="${esc(src)}" alt="${esc(alt || '')}">`;
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+}
+window.openCoverLightbox = openCoverLightbox;
 
 window.PLACEHOLDER = PLACEHOLDER;
 applyViewModeClass();
