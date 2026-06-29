@@ -15,29 +15,33 @@
       } catch (e) { document.documentElement.classList.add('mode-public'); }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <h1><a href="index.html">사회평론 도서목록</a></h1>
-      <nav class="header-nav">
-        <a href="#" id="btn-all-books" class="nav-link"><span id="total-count">전체 목록</span></a>
-        <a href="admin.html" class="nav-link internal-only">관리자</a>
-      </nav>
-    </div>
-  </header>
+  <!-- 내부 모드 전용 상단 링크 (공개 모드에서는 숨김) -->
+  <div class="landing-topbar internal-only">
+    <a href="admin.html" class="nav-link">관리자</a>
+  </div>
 
   <!-- ===== 랜딩 화면 ===== -->
   <main id="landing">
+
+    <div class="landing-hero">
+      <h1 class="landing-title"><a href="index.html">사회평론 도서목록</a></h1>
+    </div>
 
     <!-- 섹션 1: 가지치기 파인더 -->
     <section class="finder-section">
       <h2 class="section-title">어떤 책을 찾으세요?</h2>
       <div id="finder-step1" class="finder-step">
-        <button class="finder-btn" data-dept="교양">나를 위한 책</button>
-        <button class="finder-btn" data-dept="어린이">아이와 함께</button>
-        <button class="finder-btn" data-dept="대학교재·학술">공부·연구용</button>
+        <button class="finder-btn" data-dept="교양">교양</button>
+        <button class="finder-btn" data-dept="어린이">어린이</button>
+        <button class="finder-btn" data-dept="대학교재·학술">학술</button>
+        <div class="all-books-row">
+          <button type="button" class="all-books-btn" id="btn-all-books">
+            모든 책 목록 보기 <span id="total-count"></span>
+          </button>
+        </div>
       </div>
       <div id="finder-step2" class="finder-step" style="display:none">
         <button class="finder-back-btn" id="finder-back">← 다시 선택</button>
@@ -48,7 +52,6 @@
 
     <!-- 섹션 2: 검색 (일반 / AI 토글) -->
     <section class="prompt-section">
-      <h2 class="section-title">책 찾기</h2>
       <div class="search-mode-toggle" role="tablist">
         <button type="button" id="mode-normal" class="search-mode-btn"
                 onclick="setSearchMode('normal')">일반 검색</button>
@@ -141,6 +144,6 @@
 
   <script src="config.js?v=3"></script>
   <script src="util.js?v=3"></script>
-  <script src="main.js?v=8"></script>
+  <script src="main.js?v=9"></script>
 </body>
 </html>

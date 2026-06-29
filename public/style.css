@@ -51,6 +51,53 @@ a { color: inherit; }
   padding: 0 0 48px;
 }
 
+/* 랜딩 상단 (내부 모드 관리자 링크) */
+.landing-topbar {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 20px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.landing-topbar .nav-link { color: var(--muted); font-size: 14px; text-decoration: none; }
+.landing-topbar .nav-link:hover { color: var(--accent); }
+
+/* 랜딩 대표 제목 (가운데 상단, 크게) */
+.landing-hero {
+  text-align: center;
+  padding: 28px 20px 8px;
+}
+.landing-title {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--accent);
+}
+.landing-title a { text-decoration: none; }
+@media (max-width: 640px) {
+  .landing-title { font-size: 30px; }
+}
+
+/* 모든 책 목록 보기 버튼 */
+.all-books-row { margin-top: 4px; }
+.all-books-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.all-books-btn:hover { opacity: .88; }
+.all-books-btn #total-count { font-weight: 400; font-size: 13px; opacity: .8; }
+
 .section-title {
   margin: 0 0 20px;
   font-size: 20px;
@@ -154,6 +201,7 @@ a { color: inherit; }
   border-radius: 12px;
   padding: 16px 20px;
   margin-bottom: 14px;
+  max-width: 440px;  /* 검색창 가로 길이 절반 */
 }
 .ai-chips {
   display: flex;
@@ -302,7 +350,7 @@ a { color: inherit; }
 /* ---- Toolbar (search + filters) ---- */
 .toolbar {
   position: sticky;
-  top: 50px;
+  top: 0;
   z-index: 9;
   background: var(--bg);
   border-bottom: 1px solid var(--line);

@@ -38,13 +38,13 @@ async function init() {
   const countEl = document.getElementById('total-count');
   if (countEl) {
     countEl.textContent = allBooks.length
-      ? `전체 ${allBooks.length.toLocaleString()}권`
-      : '전체 목록';
+      ? `(${allBooks.length.toLocaleString()}권)`
+      : '';
   }
 
   buildFilters();
   bindEvents();
-  setSearchMode('normal');  // 기본 검색 모드 = 일반 (배지·예시칩 숨김)
+  setSearchMode('ai');  // 기본 검색 모드 = AI (배지·예시칩 표시)
   loadNewBooks();
 
   // 뒤로가기 라우팅: 현재 URL/history.state로 화면 복원
@@ -242,17 +242,35 @@ function resetFinder() {
 
 // ─── New books strip (Section 3) ──────────────────────────────────────────────
 
+// 신간 스트립에서 같은 시리즈를 하나로 묶기 위한 키.
+// 주요 시리즈 그룹 → 그룹명, 그 외 시리즈 → 시리즈명, 단행본 → ISBN(묶지 않음)
+function newbooksSeriesKey(b) {
+  const g = SERIES_GROUPS.find(grp => grp.match(b));
+  if (g) return 'group:' + g.label;
+  const s = (b.series || '').trim();
+  if (s) return 'series:' + s;
+  return 'isbn:' + b.isbn13;
+}
+
 function loadNewBooks() {
   const strip = document.getElementById('newbooks-strip');
   if (!strip) return;
 
-  // 표지 있는 신간을 우선 채우고(표지 없음은 후순위), 같은 그룹 안에서 최신순
+  // 표지 있는 신간을 우선 채우고(표지 없음은 후순위), 같은 그룹 안에서 최신순.
+  // 같은 시리즈는 하나로 묶어 대표 1권(표지 있는 최신권)만 노출한다.
+  const seenSeries = new Set();
   const newBooks = [...allBooks]
     .filter(b => b.pub_date && b.stock_status !== '절판')
     .sort((a, b) => {
       const ca = hasCover(a), cb = hasCover(b);
       if (ca !== cb) return ca ? -1 : 1;
       return (b.pub_date || '').localeCompare(a.pub_date || '');
+    })
+    .filter(b => {
+      const key = newbooksSeriesKey(b);
+      if (seenSeries.has(key)) return false;
+      seenSeries.add(key);
+      return true;
     })
     .slice(0, 12);
 
