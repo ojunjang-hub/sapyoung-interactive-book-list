@@ -543,8 +543,9 @@ a { color: inherit; }
   to   { opacity: 1; }
 }
 
-/* 제목·저자 */
+/* 제목·부제·저자 */
 .detail h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.4; }
+.detail .book-subtitle { margin: 0 0 10px; font-size: 16px; line-height: 1.5; color: var(--fg); font-weight: 500; }
 .detail .author { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
 
 /* 메타 테이블 */
@@ -912,6 +913,44 @@ a { color: inherit; }
 .status-chip.oop { background: #fef2f2; color: #b91c1c; }
 .status-chip.sold-out { background: #fff7ed; color: #c2410c; }
 .status-chip.in-stock { background: #f0fdf4; color: #15803d; }
+
+/* 마케팅 카드 상태 배지 (thin/partial/thick) */
+.card-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.card-badge.card-thin { background: #f3f4f6; color: #6b7280; }
+.card-badge.card-partial { background: #fef9c3; color: #a16207; }
+.card-badge.card-thick { background: #dcfce7; color: #15803d; }
+
+/* 편집 모달 탭 */
+.modal-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.modal-tabs .tab-btn {
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.modal-tabs .tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.mk-status-row { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
 
 /* 페이지네이션 */
 .admin-pagination {

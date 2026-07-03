@@ -12,6 +12,7 @@ from auth import verify_admin
 from config import PROJECT_ROOT, settings
 from database import get_conn
 from publish import rebuild_public_json
+from routes.marketing import card_status_case_sql
 from routes.search import load_index
 
 router = APIRouter()
@@ -53,6 +54,7 @@ class AddBookRequest(BaseModel):
 class BookUpdate(BaseModel):
     """도서 종합 편집. 보낸(set) 필드만 갱신한다(model_dump(exclude_unset=True))."""
     title: str | None = None
+    subtitle: str | None = None
     author: str | None = None
     publisher: str | None = None
     pub_date: str | None = None
@@ -75,7 +77,7 @@ class BookUpdate(BaseModel):
 
 # books 테이블에서 직접 편집 가능한 컬럼 (department/category는 overrides로 분리)
 _EDITABLE_COLS = {
-    "title", "author", "publisher", "pub_date", "series", "pages",
+    "title", "subtitle", "author", "publisher", "pub_date", "series", "pages",
     "price_standard", "price_sales", "cover_url", "stock_status",
     "description", "full_description", "publisher_description",
     "author_intro", "endorsements", "quotable_phrases", "toc",
@@ -250,11 +252,18 @@ async def add_book_by_isbn(body: AddBookRequest, _: str = Depends(verify_admin))
 async def list_books_admin(
     q: str | None = Query(None),
     department: str | None = Query(None),
+    series: str | None = Query(None),
     status_filter: str | None = Query(None),
+    card_status: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
     _: str = Depends(verify_admin),
 ):
+    _card_status_sql = card_status_case_sql("m")  # marketing_cards 별칭 m 기준
+    _join = (
+        "LEFT JOIN admin_overrides o ON b.isbn13 = o.isbn13 "
+        "LEFT JOIN marketing_cards m ON b.isbn13 = m.isbn13"
+    )
     where, params = ["1=1"], []
     if q:
         where.append("(b.title LIKE ? OR b.author LIKE ? OR b.isbn13 = ?)")
@@ -262,9 +271,15 @@ async def list_books_admin(
     if department:
         where.append("COALESCE(o.department, b.department_src) = ?")
         params.append(department)
+    if series:
+        where.append("b.series = ?")
+        params.append(series)
     if status_filter:
         where.append("b.stock_status = ?")
         params.append(status_filter)
+    if card_status:
+        where.append(f"{_card_status_sql} = ?")
+        params.append(card_status)
 
     where_sql = " AND ".join(where)
 
@@ -272,7 +287,7 @@ async def list_books_admin(
         total = conn.execute(
             f"""
             SELECT COUNT(*) FROM books b
-            LEFT JOIN admin_overrides o ON b.isbn13 = o.isbn13
+            {_join}
             WHERE {where_sql}
             """,
             params,
@@ -287,9 +302,10 @@ async def list_books_admin(
                 COALESCE(o.department, b.department_src) AS department,
                 COALESCE(o.category,   b.category_src)   AS category,
                 (o.isbn13 IS NOT NULL)                   AS has_override,
-                o.modified_at                            AS override_modified_at
+                o.modified_at                            AS override_modified_at,
+                {_card_status_sql}                       AS card_status
             FROM books b
-            LEFT JOIN admin_overrides o ON b.isbn13 = o.isbn13
+            {_join}
             WHERE {where_sql}
             ORDER BY b.pub_date DESC
             LIMIT ? OFFSET ?

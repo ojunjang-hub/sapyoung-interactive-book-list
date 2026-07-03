@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>관리자 — 사회평론 도서목록</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -45,11 +45,18 @@
     <input type="search" id="q-input" placeholder="제목, 저자, ISBN 검색…"
            onkeydown="if(event.key==='Enter') search()">
     <select id="dept-filter"><option value="">전체 부서</option></select>
+    <select id="series-filter"><option value="">전체 시리즈</option></select>
     <select id="status-filter">
       <option value="">전체 상태</option>
       <option value="재고있음">재고있음</option>
       <option value="품절">품절</option>
       <option value="절판">절판</option>
+    </select>
+    <select id="card-filter">
+      <option value="">전체 카드</option>
+      <option value="thin">thin (미작성)</option>
+      <option value="partial">partial (작성중)</option>
+      <option value="thick">thick (충실)</option>
     </select>
     <button onclick="search()">검색</button>
     <button onclick="resetFilters()">초기화</button>
@@ -67,6 +74,7 @@
           <th>출간일</th>
           <th>부서 / 분류</th>
           <th>상태</th>
+          <th>카드</th>
           <th>편집</th>
           <th>파일</th>
         </tr>
@@ -78,18 +86,42 @@
   <div class="admin-pagination" id="pagination"></div>
 </div>
 
-<!-- 편집 모달 (전체 필드 + 서식 에디터) -->
+<!-- 편집 모달 (도서 정보 탭 + 마케팅 카드 탭) -->
 <div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('edit-modal')">
   <div class="modal-box modal-box-lg">
     <h3 id="edit-modal-title" class="modal-title"></h3>
     <datalist id="dept-datalist"></datalist>
-    <div id="edit-form" class="edit-form"></div>
-    <div class="modal-actions">
-      <button class="btn-primary" onclick="saveEdit()">저장</button>
-      <button onclick="closeModal('edit-modal')">취소</button>
-      <button class="btn-ghost btn-danger" onclick="resetOverride()">분류 초기화</button>
+
+    <div class="modal-tabs">
+      <button type="button" class="tab-btn active" data-tab="book" onclick="switchTab('book')">도서 정보</button>
+      <button type="button" class="tab-btn" data-tab="marketing" onclick="switchTab('marketing')">
+        마케팅 카드 <span id="mk-badge-tab"></span>
+      </button>
     </div>
-    <p id="edit-msg" class="modal-msg"></p>
+
+    <!-- 탭 1: 도서 정보 -->
+    <div id="tab-book" class="tab-pane active">
+      <div id="edit-form" class="edit-form"></div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveEdit()">저장</button>
+        <button onclick="closeModal('edit-modal')">취소</button>
+        <button class="btn-ghost btn-danger" onclick="resetOverride()">분류 초기화</button>
+      </div>
+      <p id="edit-msg" class="modal-msg"></p>
+    </div>
+
+    <!-- 탭 2: 마케팅 카드 -->
+    <div id="tab-marketing" class="tab-pane">
+      <div class="mk-status-row">
+        카드 상태: <span id="mk-badge">—</span>
+      </div>
+      <div id="mk-form" class="edit-form"></div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveMarketing()">마케팅 카드 저장</button>
+        <button onclick="closeModal('edit-modal')">닫기</button>
+      </div>
+      <p id="mk-msg" class="modal-msg"></p>
+    </div>
   </div>
 </div>
 
@@ -120,6 +152,6 @@
 
 <script src="config.js"></script>
 <script src="util.js?v=3"></script>
-<script src="admin.js?v=4"></script>
+<script src="admin.js?v=7"></script>
 </body>
 </html>

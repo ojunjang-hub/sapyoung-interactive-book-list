@@ -131,6 +131,7 @@ function render(book) {
       </div>
       <div class="info">
         <h2>${esc(book.title)}${statusBadge}</h2>
+        ${hasValue(book.subtitle) ? `<p class="book-subtitle">${esc(book.subtitle)}</p>` : ''}
         <p class="author">${esc(book.author || '')}</p>
         ${storeHtml ? `<div class="store-links">${storeHtml}</div>` : ''}
         ${rows ? `<dl>${rows}</dl>` : ''}

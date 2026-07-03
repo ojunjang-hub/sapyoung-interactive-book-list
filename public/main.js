@@ -351,15 +351,40 @@ function fillSeriesSelect() {
   const sel = document.getElementById('filter-series');
   if (!sel) return;
   while (sel.options.length > 1) sel.remove(1);
-  // 실제 데이터에 해당 책이 있는 그룹만 표시
-  SERIES_GROUPS.forEach(g => {
-    if (allBooks.some(g.match)) {
-      const o = document.createElement('option');
-      o.value = g.label;
-      o.textContent = `${g.label} (${allBooks.filter(g.match).length}권)`;
-      sel.appendChild(o);
-    }
+
+  const addOption = (parent, value, text) => {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    parent.appendChild(o);
+  };
+
+  // 1) 주요 시리즈 그룹: 여러 시리즈를 아우르는 큐레이션(데이터에 있는 것만)
+  const activeGroups = SERIES_GROUPS.filter(g => allBooks.some(g.match));
+  if (activeGroups.length) {
+    const og = document.createElement('optgroup');
+    og.label = '주요 시리즈 그룹';
+    activeGroups.forEach(g =>
+      addOption(og, g.label, `${g.label} (${allBooks.filter(g.match).length}권)`));
+    sel.appendChild(og);
+  }
+
+  // 2) 개별 시리즈: 데이터의 모든 고유 시리즈명(그룹 라벨과 겹치는 이름은 제외)
+  const groupLabels = new Set(activeGroups.map(g => g.label));
+  const counts = new Map();
+  allBooks.forEach(b => {
+    const s = (b.series || '').trim();
+    if (s) counts.set(s, (counts.get(s) || 0) + 1);
   });
+  const seriesNames = [...counts.keys()]
+    .filter(s => !groupLabels.has(s))
+    .sort((a, b) => a.localeCompare(b, 'ko'));
+  if (seriesNames.length) {
+    const og = document.createElement('optgroup');
+    og.label = '개별 시리즈';
+    seriesNames.forEach(s => addOption(og, s, `${s} (${counts.get(s)}권)`));
+    sel.appendChild(og);
+  }
 }
 
 function fillSelect(id, options) {

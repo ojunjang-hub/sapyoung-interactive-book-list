@@ -12,7 +12,7 @@ PUBLIC_JSON_PATH = PROJECT_ROOT / "public" / "data" / "books.json"
 
 # 목록/폴백에 필요한 경량 필드만 (상세 신규 필드는 API에서 제공)
 _PUBLIC_COLUMNS = (
-    "isbn13, title, author, publisher, pub_date, "
+    "isbn13, title, subtitle, author, publisher, pub_date, "
     "department_effective AS department, "
     "category_effective   AS category, "
     "series, price_standard, price_sales, "

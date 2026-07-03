@@ -30,7 +30,7 @@ JSON_FIELDS = (
 
 # 상세 페이지에 노출할 공개 컬럼만 선별 (내부 컬럼·미사용 AI 필드 제외)
 DETAIL_COLUMNS = (
-    "isbn13, title, author, publisher, pub_date, "
+    "isbn13, title, subtitle, author, publisher, pub_date, "
     "department_effective AS department, "
     "category_effective   AS category, "
     "series, pages, price_standard, price_sales, cover_url, "

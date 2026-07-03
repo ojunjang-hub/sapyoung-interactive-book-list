@@ -21,12 +21,17 @@ class HTMLNoCacheStatics(StaticFiles):
         if ctype.startswith("text/html"):
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
-from routes import admin, books, export, files, search
+from database import get_conn
+from migrations import run_migrations
+from routes import admin, books, export, files, marketing, search
 from routes.search import load_index
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 부가 테이블(marketing_cards 등) 멱등 마이그레이션 — 정본 books는 건드리지 않음
+    with get_conn() as conn:
+        run_migrations(conn)
     load_index()
     yield
 
@@ -42,6 +47,7 @@ app.add_middleware(
 
 app.include_router(books.router, prefix="/api")
 app.include_router(admin.router, prefix="/api/admin")
+app.include_router(marketing.router, prefix="/api/admin/marketing")
 app.include_router(files.router, prefix="/api")
 app.include_router(search.router, prefix="/api/search")
 app.include_router(export.router, prefix="/api/export")
