@@ -952,6 +952,13 @@ a { color: inherit; }
 .tab-pane.active { display: block; }
 .mk-status-row { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
 
+/* 편집창 닫기 확인 다이얼로그 (편집 모달 위에 표시) */
+#confirm-close-modal { z-index: 200; }
+.confirm-box { max-width: 420px; }
+.confirm-text { margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: var(--fg); }
+.confirm-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+.confirm-actions button { width: 100%; padding: 10px 12px; font-size: 14px; }
+
 /* 페이지네이션 */
 .admin-pagination {
   display: flex;

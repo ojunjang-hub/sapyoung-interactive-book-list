@@ -9,6 +9,21 @@ const PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
 
 // esc()는 util.js에서 전역 제공
 
+// '목록으로': 목록(검색/필터 결과)에서 들어왔으면 뒤로가기로 그 화면 상태
+// (검색어·필터·스크롤 위치)를 그대로 복원한다. index.html이 상태를 URL/history에
+// 저장하므로 history.back()이면 충분하다. 외부 링크·새 탭 등 직접 진입 시에는
+// 되돌아갈 목록이 없으므로 href="index.html"(목록 첫 화면)로 폴백한다.
+function backToList(e) {
+  const fromSameSite = document.referrer && document.referrer.startsWith(location.origin);
+  if (fromSameSite && history.length > 1) {
+    e.preventDefault();
+    history.back();
+    return false;
+  }
+  return true;  // 폴백: 링크 기본 동작(index.html)
+}
+window.backToList = backToList;
+
 async function loadBook() {
   const isbn = new URLSearchParams(location.search).get('isbn');
   const root = document.getElementById('detail-root');

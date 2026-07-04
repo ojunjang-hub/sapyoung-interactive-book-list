@@ -359,13 +359,8 @@ function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
 
-async function saveEdit() {
-  if (!editingIsbn) return;
-  const msg = document.getElementById('edit-msg');
-  msg.textContent = '저장 중…';
-  msg.className = 'modal-msg';
-
-  // 변경된 필드만 수집
+// 변경된 도서 정보 필드만 수집 (dirty 판정·저장에 공용 사용)
+function collectEditPayload() {
   const payload = {};
   for (const f of EDIT_FIELDS) {
     let val;
@@ -380,26 +375,40 @@ async function saveEdit() {
     if (val === (editInitial[f.key] ?? '')) continue;  // 변경 없음
     payload[f.key] = (f.type === 'number') ? (val === '' ? null : Number(val)) : val;
   }
+  return payload;
+}
 
-  if (!Object.keys(payload).length) { msg.textContent = '변경 사항 없음'; return; }
-
+// 도서 정보 저장 요청. { ok, detail } 반환(닫기·메시지는 호출측이 처리).
+async function putEdit(payload) {
   try {
     const r = await fetch(`${API}/admin/books/${encodeURIComponent(editingIsbn)}`, {
       method: 'PATCH',
       headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     });
-    if (r.ok) {
-      msg.textContent = '저장 완료';
-      msg.className = 'modal-msg success';
-      setTimeout(() => { closeModal('edit-modal'); loadBooks(currentPage); }, 700);
-    } else {
-      const e = await r.json().catch(() => ({}));
-      msg.textContent = `저장 실패: ${e.detail || r.status}`;
-      msg.className = 'modal-msg error';
-    }
+    if (r.ok) return { ok: true };
+    const e = await r.json().catch(() => ({}));
+    return { ok: false, detail: e.detail || r.status };
   } catch {
-    msg.textContent = '저장 중 오류 발생';
+    return { ok: false, detail: '네트워크 오류' };
+  }
+}
+
+async function saveEdit() {
+  if (!editingIsbn) return;
+  const msg = document.getElementById('edit-msg');
+  const payload = collectEditPayload();
+  if (!Object.keys(payload).length) { msg.textContent = '변경 사항 없음'; msg.className = 'modal-msg'; return; }
+
+  msg.textContent = '저장 중…';
+  msg.className = 'modal-msg';
+  const res = await putEdit(payload);
+  if (res.ok) {
+    msg.textContent = '저장 완료';
+    msg.className = 'modal-msg success';
+    setTimeout(() => { closeModal('edit-modal'); loadBooks(currentPage); }, 700);
+  } else {
+    msg.textContent = `저장 실패: ${res.detail}`;
     msg.className = 'modal-msg error';
   }
 }
@@ -484,13 +493,8 @@ async function loadMarketing(isbn) {
   renderMkBadge(card.card_status);
 }
 
-async function saveMarketing() {
-  if (!editingIsbn) return;
-  const msg = document.getElementById('mk-msg');
-  msg.textContent = '저장 중…';
-  msg.className = 'modal-msg';
-
-  // 변경된 필드만 수집
+// 변경된 마케팅 카드 필드만 수집
+function collectMarketingPayload() {
   const payload = {};
   for (const f of MK_FIELDS) {
     const el = document.getElementById('mk-' + f.key);
@@ -498,33 +502,127 @@ async function saveMarketing() {
     if (val === (mkInitial[f.key] ?? '')) continue;
     payload[f.key] = val;
   }
+  return payload;
+}
 
-  if (!Object.keys(payload).length) { msg.textContent = '변경 사항 없음'; return; }
-
+// 마케팅 카드 저장 요청. { ok, card, detail } 반환.
+async function putMarketing(payload) {
   try {
     const r = await fetch(`${API}/admin/marketing/${encodeURIComponent(editingIsbn)}`, {
       method: 'PUT',
       headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     });
-    if (r.ok) {
-      const data = await r.json();
-      const card = data.card || {};
-      msg.textContent = '저장 완료';
-      msg.className = 'modal-msg success';
-      // 배지·초기값 갱신 후 목록도 새로고침(카드 컬럼 반영)
-      MK_FIELDS.forEach(f => { mkInitial[f.key] = card[f.key] == null ? '' : String(card[f.key]); });
-      renderMkBadge(card.card_status);
-      loadBooks(currentPage);
-    } else {
-      const e = await r.json().catch(() => ({}));
-      msg.textContent = `저장 실패: ${e.detail || r.status}`;
-      msg.className = 'modal-msg error';
-    }
+    if (r.ok) { const data = await r.json(); return { ok: true, card: data.card || {} }; }
+    const e = await r.json().catch(() => ({}));
+    return { ok: false, detail: e.detail || r.status };
   } catch {
-    msg.textContent = '저장 중 오류 발생';
+    return { ok: false, detail: '네트워크 오류' };
+  }
+}
+
+async function saveMarketing() {
+  if (!editingIsbn) return;
+  const msg = document.getElementById('mk-msg');
+  const payload = collectMarketingPayload();
+  if (!Object.keys(payload).length) { msg.textContent = '변경 사항 없음'; msg.className = 'modal-msg'; return; }
+
+  msg.textContent = '저장 중…';
+  msg.className = 'modal-msg';
+  const res = await putMarketing(payload);
+  if (res.ok) {
+    msg.textContent = '저장 완료';
+    msg.className = 'modal-msg success';
+    // 배지·초기값 갱신 후 목록도 새로고침(카드 컬럼 반영)
+    MK_FIELDS.forEach(f => { mkInitial[f.key] = res.card[f.key] == null ? '' : String(res.card[f.key]); });
+    renderMkBadge(res.card.card_status);
+    loadBooks(currentPage);
+  } else {
+    msg.textContent = `저장 실패: ${res.detail}`;
     msg.className = 'modal-msg error';
   }
+}
+
+// ── 편집창 닫기 가드 ──────────────────────────────────────────────────────────
+// 바깥(오버레이) 클릭·Esc 시: 저장 안 된 변경이 있으면 저장 여부를 묻는다.
+// (모달 안의 '취소'·'닫기' 버튼은 의도적 취소이므로 묻지 않고 그대로 닫는다.)
+function editDirtyTabs() {
+  const tabs = [];
+  if (Object.keys(collectEditPayload()).length) tabs.push('book');
+  if (Object.keys(collectMarketingPayload()).length) tabs.push('marketing');
+  return tabs;
+}
+
+// 커스텀 확인 다이얼로그(크롬 기본 confirm 대신). 'save' | 'discard' | 'cancel' 로 resolve.
+function confirmClose() {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirm-close-modal');
+    const btnSave = document.getElementById('cc-save');
+    const btnDiscard = document.getElementById('cc-discard');
+    const btnCancel = document.getElementById('cc-cancel');
+
+    const finish = (val) => {
+      modal.style.display = 'none';
+      btnSave.removeEventListener('click', onSave);
+      btnDiscard.removeEventListener('click', onDiscard);
+      btnCancel.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onOverlay);
+      document.removeEventListener('keydown', onKey, true);
+      resolve(val);
+    };
+    const onSave = () => finish('save');
+    const onDiscard = () => finish('discard');
+    const onCancel = () => finish('cancel');
+    const onOverlay = (e) => { if (e.target === modal) finish('cancel'); };
+    // 캡처 단계로 등록 → 편집창의 전역 Esc 핸들러보다 먼저 처리하고 전파를 막는다.
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); finish('cancel'); }
+    };
+
+    btnSave.addEventListener('click', onSave);
+    btnDiscard.addEventListener('click', onDiscard);
+    btnCancel.addEventListener('click', onCancel);
+    modal.addEventListener('click', onOverlay);
+    document.addEventListener('keydown', onKey, true);
+    modal.style.display = 'flex';
+    btnSave.focus();  // Enter로 '저장하고 닫기'
+  });
+}
+
+async function requestCloseEdit() {
+  const dirty = editDirtyTabs();
+  if (!dirty.length) { closeModal('edit-modal'); return; }
+  // 확인 다이얼로그가 이미 떠 있으면 중복 실행 방지
+  if (document.getElementById('confirm-close-modal').style.display === 'flex') return;
+
+  const choice = await confirmClose();
+  if (choice === 'cancel') return;                                // 계속 편집(변경 유지)
+  if (choice === 'discard') { closeModal('edit-modal'); return; } // 저장하지 않고 닫기
+
+  // choice === 'save' → 변경된 탭만 저장 후 닫기.
+  // 하나라도 실패하면 해당 탭을 보여주고 닫지 않는다(변경 보존).
+  if (dirty.includes('book')) {
+    const msg = document.getElementById('edit-msg');
+    msg.textContent = '저장 중…'; msg.className = 'modal-msg';
+    const res = await putEdit(collectEditPayload());
+    if (!res.ok) {
+      switchTab('book');
+      msg.textContent = `저장 실패: ${res.detail}`; msg.className = 'modal-msg error';
+      return;
+    }
+  }
+  if (dirty.includes('marketing')) {
+    const msg = document.getElementById('mk-msg');
+    msg.textContent = '저장 중…'; msg.className = 'modal-msg';
+    const res = await putMarketing(collectMarketingPayload());
+    if (!res.ok) {
+      switchTab('marketing');
+      msg.textContent = `저장 실패: ${res.detail}`; msg.className = 'modal-msg error';
+      return;
+    }
+  }
+  closeModal('edit-modal');
+  loadBooks(currentPage);
 }
 
 // ─── Files Modal ──────────────────────────────────────────────────────────────
@@ -640,10 +738,13 @@ async function deleteFile(attachId) {
 // ─── Keyboard ────────────────────────────────────────────────────────────────
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    closeModal('edit-modal');
-    closeModal('files-modal');
+  if (e.key !== 'Escape') return;
+  // 편집창이 열려 있으면 바깥 클릭과 동일하게 저장 여부를 확인한다.
+  if (document.getElementById('edit-modal').style.display === 'flex') {
+    requestCloseEdit();
+    return;
   }
+  closeModal('files-modal');
 });
 
 // ─── 신간 추가 ───────────────────────────────────────────────────────────────

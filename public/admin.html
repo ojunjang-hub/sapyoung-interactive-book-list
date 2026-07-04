@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>관리자 — 사회평론 도서목록</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -87,7 +87,7 @@
 </div>
 
 <!-- 편집 모달 (도서 정보 탭 + 마케팅 카드 탭) -->
-<div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('edit-modal')">
+<div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)requestCloseEdit()">
   <div class="modal-box modal-box-lg">
     <h3 id="edit-modal-title" class="modal-title"></h3>
     <datalist id="dept-datalist"></datalist>
@@ -125,6 +125,19 @@
   </div>
 </div>
 
+<!-- 편집창 닫기 확인 다이얼로그 (편집창 위에 표시) -->
+<div id="confirm-close-modal" class="modal-overlay">
+  <div class="modal-box confirm-box">
+    <h3 class="modal-title">저장하지 않은 변경사항</h3>
+    <p class="confirm-text">편집 중인 내용이 아직 저장되지 않았습니다.<br>어떻게 할까요?</p>
+    <div class="modal-actions confirm-actions">
+      <button class="btn-primary" id="cc-save">저장하고 닫기</button>
+      <button class="btn-ghost btn-danger" id="cc-discard">저장하지 않고 닫기</button>
+      <button id="cc-cancel">계속 편집</button>
+    </div>
+  </div>
+</div>
+
 <!-- 파일 모달 -->
 <div id="files-modal" class="modal-overlay" onclick="if(event.target===this)closeModal('files-modal')">
   <div class="modal-box">
@@ -152,6 +165,6 @@
 
 <script src="config.js"></script>
 <script src="util.js?v=3"></script>
-<script src="admin.js?v=7"></script>
+<script src="admin.js?v=9"></script>
 </body>
 </html>
