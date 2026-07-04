@@ -38,6 +38,7 @@ _SELECT = (
 )
 
 _MAX_ISBNS = 5000  # 방어용 상한(전체가 882권 규모)
+SHELF_MAX_IDS = 50  # 임시 보관함 경로(?max=50)에서만 적용하는 상한
 
 
 class ExportRequest(BaseModel):
@@ -177,13 +178,31 @@ def _build_pdf(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+def export_pdf(rows: list[dict]) -> bytes:
+    """PDF 내보내기 진입점. 현재는 목록형 표를 재사용한다.
+
+    추후 '도서당 1쪽 카탈로그' 형태로 개편할 때 이 함수 내부만 교체하면
+    호출부(export_books)는 그대로 둘 수 있도록 진입점을 분리해 둔다.
+    """
+    return _build_pdf(rows)
+
+
 @router.post("/books")
-def export_books(body: ExportRequest, format: str = Query("xlsx")):
+def export_books(
+    body: ExportRequest,
+    format: str = Query("xlsx"),
+    max: int | None = Query(None, description="지정 시 isbns 개수 상한(보관함=50). 초과하면 400."),
+):
     fmt = format.lower()
     if fmt not in ("xlsx", "pdf"):
         raise HTTPException(400, "지원하지 않는 형식입니다 (xlsx 또는 pdf)")
 
-    rows = _fetch_rows(body.isbns)
+    # 보관함 내보내기 경로는 ?max=50 을 붙여 상한을 검증한다.
+    # (그리드 전체 내보내기는 max 없이 호출 → 기존 5000 상한만 적용)
+    if max is not None and body.isbns is not None and len(body.isbns) > max:
+        raise HTTPException(400, f"한 번에 최대 {max}권까지 내보낼 수 있습니다")
+
+    rows = _fetch_rows(body.isbns)  # 존재하지 않는 isbn13은 조용히 무시됨
     if not rows:
         raise HTTPException(404, "내보낼 도서가 없습니다")
 
@@ -191,7 +210,7 @@ def export_books(body: ExportRequest, format: str = Query("xlsx")):
         data = _build_xlsx(rows)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
-        data = _build_pdf(rows)
+        data = export_pdf(rows)
         media = "application/pdf"
 
     # 파일명은 ASCII(헤더 인코딩 안전). 한글 파일명은 프런트가 a.download로 지정.

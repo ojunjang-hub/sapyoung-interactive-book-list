@@ -34,6 +34,7 @@ async function init() {
       allBooks = [];
     }
   }
+  window.allBooks = allBooks;  // 보관함 패널(shelf.js)이 메타데이터로 재사용
 
   const countEl = document.getElementById('total-count');
   if (countEl) {
@@ -503,6 +504,27 @@ async function exportBooks(format) {
 }
 window.exportBooks = exportBooks;
 
+// 카드 표지 우하단의 보관함 +/✓ 버튼 (그리드·AI 공용)
+function shelfBtnHtml(isbn13) {
+  const id = esc(isbn13);
+  const inShelf = !!(window.Shelf && Shelf.has(isbn13));
+  return `<button type="button" class="shelf-add-btn${inShelf ? ' in-shelf' : ''}" ` +
+    `data-shelf-toggle="${id}" ` +
+    `aria-label="${inShelf ? '보관함에서 제거' : '보관함에 추가'}">` +
+    `<span class="shelf-add-icon" aria-hidden="true">${inShelf ? '✓' : '+'}</span></button>`;
+}
+
+// 렌더된 그리드의 +/✓ 버튼 상태를 현재 보관함과 동기화(렌더 직후·shelf:change·뒤로가기 복원 시)
+function syncCardButtons() {
+  document.querySelectorAll('[data-shelf-toggle]').forEach(btn => {
+    const inShelf = !!(window.Shelf && Shelf.has(btn.getAttribute('data-shelf-toggle')));
+    btn.classList.toggle('in-shelf', inShelf);
+    btn.setAttribute('aria-label', inShelf ? '보관함에서 제거' : '보관함에 추가');
+    const icon = btn.querySelector('.shelf-add-icon');
+    if (icon) icon.textContent = inShelf ? '✓' : '+';
+  });
+}
+
 function renderGrid(books) {
   const grid = document.getElementById('book-grid');
   document.getElementById('result-count').textContent = `${books.length.toLocaleString()}권`;
@@ -522,6 +544,7 @@ function renderGrid(books) {
           <img src="${esc(b.cover_url || '')}" alt="${esc(b.title)}" loading="lazy"
                onerror="this.onerror=null;this.src=window.PLACEHOLDER">
           ${badge}
+          ${shelfBtnHtml(b.isbn13)}
         </div>
         <div class="book-meta">
           <p class="title">${esc(b.title)}</p>
@@ -530,6 +553,7 @@ function renderGrid(books) {
         </div>
       </a>`;
   }).join('');
+  syncCardButtons();
 }
 
 // ─── 검색 모드 (일반 / AI) ────────────────────────────────────────────────────
@@ -625,6 +649,7 @@ async function runAiSearch() {
             <img src="${esc(b.cover_url || '')}" alt="${esc(b.title)}" loading="lazy"
                  onerror="this.onerror=null;this.src=window.PLACEHOLDER">
             ${badge}
+            ${shelfBtnHtml(b.isbn13)}
           </div>
           <div class="book-meta">
             <p class="title">${esc(b.title)}</p>
@@ -635,6 +660,7 @@ async function runAiSearch() {
         </a>`;
     }).join('');
 
+    syncCardButtons();
     panel.style.display = 'block';
 
   } catch (e) {
@@ -693,10 +719,28 @@ function bindEvents() {
 
   // 상세(book.html)로 이동하기 직전, 현재 스크롤 위치를 history.state에 저장
   // → 뒤로가기로 돌아왔을 때 목록 스크롤 위치 복원
+  // (보관함 +/✓ 버튼 클릭은 이동이 아니므로 제외)
   document.addEventListener('click', e => {
+    if (e.target.closest('[data-shelf-toggle]')) return;
     const card = e.target.closest('a.book-card, a.newbook-card');
     if (card) replaceNav();
   }, true);
+
+  // 보관함 담기/빼기: 두 그리드에 이벤트 위임(카드 링크 전파 차단)
+  ['book-grid', 'ai-grid'].forEach(gid => {
+    const g = document.getElementById(gid);
+    if (!g) return;
+    g.addEventListener('click', e => {
+      const btn = e.target.closest('[data-shelf-toggle]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.Shelf) Shelf.toggle(btn.getAttribute('data-shelf-toggle'));
+    });
+  });
+
+  // 보관함 변경 시 현재 그리드 버튼 상태 재적용(상세↔그리드, 다중 탭 동기화)
+  document.addEventListener('shelf:change', syncCardButtons);
 }
 
 window.PLACEHOLDER = PLACEHOLDER;

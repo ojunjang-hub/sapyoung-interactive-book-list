@@ -11,3 +11,4 @@
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-06-18 | 초기 구성 | 전체 | 설계 명세 v2 기반 하네스 구축 |
+| 2026-07-05 | 임시 보관함 기능 하네스 | 프런트(shelf.js·main.js·book.js·style.css·*.html) + export.py | localStorage 기반 보관함(최대 50권)·오버레이 패널·내보내기 ids 연동. 계약: `_workspace/shelf_feature_spec.md` |

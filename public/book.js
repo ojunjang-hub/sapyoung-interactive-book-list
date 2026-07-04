@@ -123,6 +123,14 @@ function render(book) {
     ? coverSm.replace('/covers/', '/covers/lg/')
     : coverSm.replace('cover200', 'cover500');
 
+  // 보관함 담기 토글 버튼 (서점 링크 근처)
+  const inShelf = !!(window.Shelf && book.isbn13 && Shelf.has(book.isbn13));
+  const shelfHtml = book.isbn13
+    ? `<div class="detail-shelf"><button type="button" id="detail-shelf-btn" ` +
+      `class="btn-shelf${inShelf ? ' in-shelf' : ''}" data-isbn="${esc(book.isbn13)}">` +
+      `${inShelf ? '보관함에 담김 ✓' : '보관함에 추가'}</button></div>`
+    : '';
+
   const attachments = Array.isArray(book.attachments) ? book.attachments : [];
 
   const attachHtml = attachments.length ? `
@@ -149,11 +157,26 @@ function render(book) {
         ${hasValue(book.subtitle) ? `<p class="book-subtitle">${esc(book.subtitle)}</p>` : ''}
         <p class="author">${esc(book.author || '')}</p>
         ${storeHtml ? `<div class="store-links">${storeHtml}</div>` : ''}
+        ${shelfHtml}
         ${rows ? `<dl>${rows}</dl>` : ''}
         ${sections}
         ${attachHtml}
       </div>
     </article>`;
+
+  // 보관함 버튼: 토글 + 상태 동기화(그리드↔상세, 다중 탭)
+  const shelfBtn = document.getElementById('detail-shelf-btn');
+  if (shelfBtn) {
+    shelfBtn.addEventListener('click', () => {
+      if (window.Shelf) Shelf.toggle(shelfBtn.getAttribute('data-isbn'));
+    });
+    const syncDetailShelfBtn = () => {
+      const on = !!(window.Shelf && Shelf.has(book.isbn13));
+      shelfBtn.classList.toggle('in-shelf', on);
+      shelfBtn.textContent = on ? '보관함에 담김 ✓' : '보관함에 추가';
+    };
+    document.addEventListener('shelf:change', syncDetailShelfBtn);
+  }
 }
 
 // 관리자 서식(HTML)이 들어온 필드는 정제 후 그대로, 아니면 평문 줄바꿈 처리(하위호환)
