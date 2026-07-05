@@ -71,6 +71,23 @@
       cache = [];
       persist(); emit();
     },
+    // 순서 재배치: 현재 담긴 id만 유효(누락분은 기존 순서로 뒤에 보존).
+    // 순서가 실제로 바뀐 경우에만 persist/emit 하고 true 반환.
+    reorder(ids) {
+      if (!Array.isArray(ids)) return false;
+      const cur = new Set(cache);
+      const seen = new Set();
+      const out = [];
+      for (const v of ids) {
+        const s = String(v == null ? '' : v).trim();
+        if (s && cur.has(s) && !seen.has(s)) { seen.add(s); out.push(s); }
+      }
+      for (const s of cache) { if (!seen.has(s)) out.push(s); }  // 안전: 누락분 보존
+      if (out.length === cache.length && out.every((v, i) => v === cache[i])) return false;
+      cache = out;
+      persist(); emit();
+      return true;
+    },
   };
   window.Shelf = Shelf;
 
@@ -136,6 +153,62 @@
 
   // ── 런처 + 배지 + 오버레이 패널 주입 ──
   let launcher, backdrop, panel;
+  let dragEl = null;                        // 드래그 중인 항목
+  let sortState = { key: null, dir: 'asc' };  // 활성 정렬 기준/방향
+
+  // 드래그 중 커서 y 기준, 삽입 지점(바로 아래 항목) 계산
+  function dragAfterElement(container, y) {
+    const els = Array.from(container.querySelectorAll('.shelf-item:not(.dragging)'));
+    let closest = null;
+    let closestOffset = -Infinity;
+    for (const el of els) {
+      const box = el.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = el; }
+    }
+    return closest;
+  }
+
+  // 정렬 적용: 같은 기준 재클릭이면 방향 토글, 다른 기준이면 오름차순으로 시작
+  async function applySort(key) {
+    if (key !== 'title' && key !== 'pub_date') return;
+    if (sortState.key === key) sortState.dir = (sortState.dir === 'asc' ? 'desc' : 'asc');
+    else { sortState.key = key; sortState.dir = 'asc'; }
+
+    const catalog = await getCatalog();
+    const byId = new Map(catalog.map(b => [String(b.isbn13), b]));
+    const dir = sortState.dir === 'asc' ? 1 : -1;
+    const sorted = Shelf.list().sort((x, y) => {
+      const bx = byId.get(String(x)) || {};
+      const by = byId.get(String(y)) || {};
+      if (key === 'title') {
+        return String(bx.title || '').localeCompare(String(by.title || ''), 'ko') * dir;
+      }
+      // 출간일: 빈 값은 방향과 무관하게 항상 뒤로
+      const dx = bx.pub_date || '', dy = by.pub_date || '';
+      if (!dx && !dy) return 0;
+      if (!dx) return 1;
+      if (!dy) return -1;
+      return (dx < dy ? -1 : (dx > dy ? 1 : 0)) * dir;
+    });
+    Shelf.reorder(sorted);      // shelf:change → 본문 재렌더
+    updateSortButtons();
+  }
+
+  function updateSortButtons() {
+    if (!panel) return;
+    panel.querySelectorAll('.shelf-sort').forEach(btn => {
+      const k = btn.getAttribute('data-sort');
+      const base = k === 'title' ? '가나다순' : '출간일순';
+      if (sortState.key === k) {
+        btn.setAttribute('aria-pressed', 'true');
+        btn.textContent = base + (sortState.dir === 'asc' ? ' ↑' : ' ↓');
+      } else {
+        btn.setAttribute('aria-pressed', 'false');
+        btn.textContent = base;
+      }
+    });
+  }
 
   function boot() {
     // 런처(우상단 고정) + 권수 배지
@@ -170,6 +243,11 @@
         '<h2 class="shelf-panel-title">보관함 <span class="shelf-panel-count"></span></h2>' +
         '<button type="button" class="shelf-close" aria-label="보관함 닫기">&times;</button>' +
       '</div>' +
+      '<div class="shelf-panel-tools" hidden>' +
+        '<span class="shelf-tools-label">정렬</span>' +
+        '<button type="button" class="shelf-sort" data-sort="title" aria-pressed="false">가나다순</button>' +
+        '<button type="button" class="shelf-sort" data-sort="pub_date" aria-pressed="false">출간일순</button>' +
+      '</div>' +
       '<div class="shelf-panel-body"></div>' +
       '<div class="shelf-panel-foot">' +
         '<div class="shelf-export">' +
@@ -188,13 +266,51 @@
     panel.querySelector('.shelf-export-xlsx').addEventListener('click', () => exportShelf('xlsx'));
     panel.querySelector('.shelf-export-pdf').addEventListener('click', () => exportShelf('pdf'));
 
+    // 정렬 버튼: 같은 기준 재클릭 시 오름차순↔내림차순 토글
+    panel.querySelector('.shelf-panel-tools').addEventListener('click', e => {
+      const btn = e.target.closest('.shelf-sort');
+      if (btn) applySort(btn.getAttribute('data-sort'));
+    });
+
     // 항목 제거는 이벤트 위임(내용 재렌더에도 유지)
-    panel.querySelector('.shelf-panel-body').addEventListener('click', e => {
+    const body = panel.querySelector('.shelf-panel-body');
+    body.addEventListener('click', e => {
       const rm = e.target.closest('[data-remove]');
       if (!rm) return;
       e.preventDefault();
       e.stopPropagation();
       Shelf.remove(rm.getAttribute('data-remove'));
+    });
+
+    // 드래그로 순서 바꾸기 (HTML5 DnD, 위임)
+    body.addEventListener('dragstart', e => {
+      const item = e.target.closest('.shelf-item');
+      if (!item) return;
+      dragEl = item;
+      item.classList.add('dragging');
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.getAttribute('data-isbn') || '');
+      } catch (_) {}
+    });
+    body.addEventListener('dragover', e => {
+      if (!dragEl) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const after = dragAfterElement(body, e.clientY);
+      if (after == null) body.appendChild(dragEl);
+      else if (after !== dragEl) body.insertBefore(dragEl, after);
+    });
+    body.addEventListener('drop', e => { if (dragEl) e.preventDefault(); });
+    body.addEventListener('dragend', () => {
+      if (!dragEl) return;
+      dragEl.classList.remove('dragging');
+      dragEl = null;
+      const ids = Array.from(body.querySelectorAll('.shelf-item'))
+        .map(el => el.getAttribute('data-isbn'));
+      // 수동 재배치 → 정렬 표시 해제 후 반영
+      if (Shelf.reorder(ids)) { sortState.key = null; }
+      else { renderPanelBody(); }  // 순서 불변이면 DOM만 원복
     });
 
     updateBadge();
@@ -263,6 +379,10 @@
     countEl.textContent = items.length ? `(${items.length})` : '';
     updateFootState(items.length > 0);
 
+    const tools = panel.querySelector('.shelf-panel-tools');
+    if (tools) tools.hidden = items.length < 2;  // 1권 이하면 정렬 무의미
+    updateSortButtons();
+
     if (!items.length) {
       body.innerHTML =
         '<div class="shelf-empty">보관함이 비어 있습니다.<br>' +
@@ -273,10 +393,11 @@
     body.innerHTML = items.map(b => {
       const cls = [b.department, b.category].filter(Boolean).join(' · ');
       return '' +
-        `<div class="shelf-item" data-isbn="${esc(b.isbn13)}">` +
-          `<a class="shelf-item-link" href="book.html?isbn=${esc(b.isbn13)}">` +
+        `<div class="shelf-item" data-isbn="${esc(b.isbn13)}" draggable="true">` +
+          '<span class="shelf-item-grip" aria-hidden="true" title="드래그해서 순서 바꾸기">⠿</span>' +
+          `<a class="shelf-item-link" href="book.html?isbn=${esc(b.isbn13)}" draggable="false">` +
             `<img class="shelf-item-cover" src="${esc(b.cover_url || '')}" alt="" loading="lazy" ` +
-                 `onerror="this.onerror=null;this.src=window.PLACEHOLDER">` +
+                 `draggable="false" onerror="this.onerror=null;this.src=window.PLACEHOLDER">` +
             '<span class="shelf-item-meta">' +
               `<span class="shelf-item-title">${esc(b.title || '')}</span>` +
               `<span class="shelf-item-author">${esc(b.author || '')}</span>` +
