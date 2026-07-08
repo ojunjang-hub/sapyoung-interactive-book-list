@@ -421,12 +421,21 @@ function getFilters() {
   };
 }
 
+// 검색 정규화: 대소문자·띄어쓰기·문장부호(구두점/기호)를 제거해
+// "처음, 읽는 철학" ↔ "처음읽는철학"처럼 느슨하게 매칭되도록 한다.
+function normSearch(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
+}
+
 function applyFilters(books, f) {
   return books.filter(b => {
     if (f.q) {
-      const q = f.q.toLowerCase();
-      if (!(b.title  || '').toLowerCase().includes(q) &&
-          !(b.author || '').toLowerCase().includes(q)) return false;
+      const q = normSearch(f.q);
+      if (q &&
+          !normSearch(b.title).includes(q) &&
+          !normSearch(b.author).includes(q)) return false;
     }
     if (f.department && b.department  !== f.department) return false;
     if (f.category   && b.category    !== f.category)   return false;
@@ -436,8 +445,8 @@ function applyFilters(books, f) {
     }
     if (f.year       && !(b.pub_date  || '').startsWith(f.year)) return false;
     if (f.stock      && b.stock_status !== f.stock)     return false;
-    if (f.priceMin   && (b.price_sales == null || b.price_sales < +f.priceMin)) return false;
-    if (f.priceMax   && (b.price_sales == null || b.price_sales > +f.priceMax)) return false;
+    if (f.priceMin   && (b.price_standard == null || b.price_standard < +f.priceMin)) return false;
+    if (f.priceMax   && (b.price_standard == null || b.price_standard > +f.priceMax)) return false;
     return true;
   });
 }
@@ -453,8 +462,8 @@ function sortBooks(books, key) {
     if (ca !== cb) return ca ? -1 : 1;
     switch (key) {
       case 'title_asc':   return (a.title || '').localeCompare(b.title || '', 'ko');
-      case 'price_asc':   return (a.price_sales || 0) - (b.price_sales || 0);
-      case 'price_desc':  return (b.price_sales || 0) - (a.price_sales || 0);
+      case 'price_asc':   return (a.price_standard || 0) - (b.price_standard || 0);
+      case 'price_desc':  return (b.price_standard || 0) - (a.price_standard || 0);
       case 'pub_date_desc':
       default:            return (b.pub_date || '').localeCompare(a.pub_date || '');
     }
@@ -537,7 +546,7 @@ function renderGrid(books) {
     const sold = b.stock_status === '품절';
     const badge = oop  ? '<span class="badge oop">절판</span>'
                 : sold ? '<span class="badge sold-out">품절</span>' : '';
-    const price = b.price_sales != null ? '₩' + b.price_sales.toLocaleString() : '';
+    const price = b.price_standard != null ? '₩' + b.price_standard.toLocaleString() : '';
     return `
       <a class="book-card${oop ? ' out-of-print' : ''}" href="book.html?isbn=${esc(b.isbn13)}">
         <div class="cover-wrap">
@@ -642,7 +651,7 @@ async function runAiSearch() {
       const sold = b.stock_status === '품절';
       const badge = oop  ? '<span class="badge oop">절판</span>'
                   : sold ? '<span class="badge sold-out">품절</span>' : '';
-      const price = b.price_sales != null ? '₩' + b.price_sales.toLocaleString() : '';
+      const price = b.price_standard != null ? '₩' + b.price_standard.toLocaleString() : '';
       return `
         <a class="book-card${oop ? ' out-of-print' : ''}" href="book.html?isbn=${esc(b.isbn13)}">
           <div class="cover-wrap">

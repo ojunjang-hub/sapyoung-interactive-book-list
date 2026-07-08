@@ -25,6 +25,7 @@ a { color: inherit; }
   background: var(--accent);
   color: #fff;
   padding: 14px 20px;
+  min-height: 58px;   /* 우상단 런처(48px)가 헤더 안에 온전히 담기도록 높이 보장 */
 }
 .site-header h1 { margin: 0; font-size: 20px; }
 .site-header h1 a { text-decoration: none; }
@@ -551,12 +552,18 @@ a { color: inherit; }
 /* 메타 테이블 */
 .detail dl {
   display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 5px 12px;
+  grid-template-columns: 92px 1fr;
+  gap: 7px 12px;
   margin: 0 0 18px;
   font-size: 14px;
 }
-.detail dt { color: var(--muted); white-space: nowrap; }
+.detail dt {
+  color: var(--fg);
+  white-space: nowrap;
+  font-family: "Malgun Gothic", -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
 .detail dd { margin: 0; }
 
 /* 서점 링크 */
@@ -593,11 +600,11 @@ a { color: inherit; }
   margin-top: 4px;
 }
 .detail .description h3 {
-  font-size: 12px;
+  font-family: "Malgun Gothic", -apple-system, "Segoe UI", sans-serif;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  color: var(--fg);
+  letter-spacing: .01em;
   margin: 0 0 12px;
 }
 .detail .description p { margin: 0 0 12px; }
@@ -1192,7 +1199,7 @@ textarea.edit-input { resize: vertical; line-height: 1.6; }
 /* 우상단 런처 + 배지 */
 .shelf-launcher {
   position: fixed;
-  top: 14px;
+  top: 5px;                 /* 헤더(58px) 세로 중앙에 맞춤 */
   right: 14px;
   width: 48px;
   height: 48px;
@@ -1438,7 +1445,7 @@ textarea.edit-input { resize: vertical; line-height: 1.6; }
 /* ── 이용 안내(도움말) ── */
 .help-launcher {
   position: fixed;
-  top: 14px;
+  top: 5px;                  /* 헤더(58px) 세로 중앙에 맞춤 */
   right: 72px;               /* 보관함 런처(right:14, 48px) 왼쪽 */
   width: 48px;
   height: 48px;
